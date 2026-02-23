@@ -1,0 +1,15 @@
+# --- OUTILS MIS EN PAUSE (Pour la V2 avec LocalStack) ---
+# boto3
+# apache-airflow-providers-amazon
+
+# --- OUTILS ACTIFS (Pour notre MVP) ---
+# Pour faire nos calculs de données
+pyspark
+pandas
+
+# Pour envoyer les résultats finaux vers la vitrine
+elasticsearch
+apache-airflow-providers-elasticsearch
+
+# Pour interroger les APIs (OpenSky et Open-Meteo)
+requests
