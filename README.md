@@ -7,6 +7,8 @@ La problématique métier que nous résolvons est la suivante : *Comment identif
 
 Pour y répondre, notre pipeline ingère, nettoie et croise les données de géolocalisation des vols en direct avec les prévisions météorologiques locales, avant d'exposer un "Score de Risque" sur un tableau de bord interactif.
 
+![Architecture du pipeline Sky-Safe](utils/architecture.jpg)
+
 ## 🛠️ Stack Technique
 * **Orchestration :** Apache Airflow (DAG déclenché toutes les 2 minutes)
 * **Ingestion (Extract) :** Python (Requests, Pandas)
@@ -21,6 +23,9 @@ Pour y répondre, notre pipeline ingère, nettoie et croise les données de géo
 2. **Open-Meteo API** (https://open-meteo.com/en/docs) : Données météorologiques haute précision (Vitesse du vent, Précipitations, Orages) basées sur un système de grille géographique.
 
 ## 📂 Architecture du Data Lake (Clean Naming)
+
+<img src="utils/arborescence_projet.jpg" alt="Arborescence du projet" width="400"/>
+
 Le projet respecte une hiérarchie stricte de stockage des fichiers pour garantir la traçabilité de la donnée : `data/<layer>/<group>/<dataEntity>/date=YYYY-MM-DD/hour=HH/`
 
 * `data/raw/` : Données JSON brutes fraîchement extraites des APIs.
@@ -47,6 +52,8 @@ Une fois les conteneurs démarrés, les services sont accessibles aux adresses s
 1. Connectez-vous à l'interface Airflow.
 2. Localisez le DAG nommé `sky_safe_pipeline`.
 3. Activez le bouton "Unpause" (le toggle switch) pour lancer l'exécution automatisée toutes les 2 minutes.
+
+![DAG Airflow sky_safe_pipeline](utils/dag_airflow.jpg)
 
 ---
 
@@ -121,5 +128,5 @@ Projet réalisé dans le cadre du cours **DATA705 - BDD NoSQL** à [Télécom Pa
 | Nom | GitHub |
 |-----|--------|
 | Tahiana Hajanirina Andriambahoaka | [@tahianahajanirina](https://github.com/tahianahajanirina) |
-| Mohammed Ammar | [@mohammed-ammar](https://github.com/mohammed-ammar) |
-| Lounis | [@lounis](https://github.com/lounis) |
+| Mohammed Ammar | [@mohamedbebay1-sys](https://github.com/mohamedbebay1-sys) |
+| Lounis Hamroun | [@lounishamroun](https://github.com/lounishamroun) |
