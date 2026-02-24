@@ -24,7 +24,7 @@ Pour y répondre, notre pipeline ingère, nettoie et croise les données de géo
 
 ## 📂 Architecture du Data Lake (Clean Naming)
 
-<img src="utils/arborescence_projet.jpg" alt="Arborescence du projet" width="400"/>
+<img src="utils/arborescence.jpg" alt="Arborescence du projet" width="400"/>
 
 Le projet respecte une hiérarchie stricte de stockage des fichiers pour garantir la traçabilité de la donnée : `data/<layer>/<group>/<dataEntity>/date=YYYY-MM-DD/hour=HH/`
 
