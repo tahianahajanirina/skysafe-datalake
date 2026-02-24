@@ -3,13 +3,13 @@ version: '3.8'
 # 1. ON SÉPARE LES VARIABLES D'ENVIRONNEMENT COMMUNES
 x-airflow-env: &airflow-env
   AIRFLOW__CORE__EXECUTOR: LocalExecutor
-  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-  AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+  AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
   AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
   # Clé secrète partagée entre webserver et scheduler (élimine le JWT InvalidSignatureError)
-  AIRFLOW__CORE__SECRET_KEY: 'skysafe_super_secret_key_2026'
-  AIRFLOW__CORE__FERNET_KEY: 'zTjhcXwM3GkP2ThmTxyRqB1_5Hk1BGlAO8m9CqvM6dI='
-  AIRFLOW__WEBSERVER__SECRET_KEY: 'skysafe_super_secret_key_2026'
+  AIRFLOW__CORE__SECRET_KEY: '${AIRFLOW__CORE__SECRET_KEY}'
+  AIRFLOW__CORE__FERNET_KEY: '${AIRFLOW__CORE__FERNET_KEY}'
+  AIRFLOW__WEBSERVER__SECRET_KEY: '${AIRFLOW__WEBSERVER__SECRET_KEY}'
   AIRFLOW__WEBSERVER__WORKERS: '1'
   AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: '300'
   AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: '300'
@@ -36,9 +36,9 @@ services:
   postgres:
     image: postgres:13
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 5s
