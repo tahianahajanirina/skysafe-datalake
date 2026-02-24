@@ -1,6 +1,8 @@
 import sys
 
 sys.path.insert(0, "/opt/airflow/src")
+sys.path.insert(1, ".")
+sys.path.insert(2, "./src")
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
