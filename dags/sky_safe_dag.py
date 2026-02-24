@@ -56,6 +56,7 @@ with DAG(
     combine_data_spark = PythonOperator(
         task_id='combine_data_spark',
         python_callable=combine_data_main,
+        trigger_rule='all_success',  # Exécute si les deux tâches précédentes réussissent
     )
 
     index_to_elastic = PythonOperator(
