@@ -28,7 +28,7 @@ with DAG(
     dag_id='sky_safe_pipeline',
     default_args=default_args,
     description='Pipeline Big Data : Vols (OpenSky) x Météo (Open-Meteo) -> Elasticsearch',
-    schedule_interval='*/2 * * * *',
+    schedule='*/2 * * * *',
     catchup=False,
     tags=['sky_safe', 'production'],
 ) as dag:
