@@ -128,5 +128,5 @@ Projet réalisé dans le cadre du cours **DATA705 - BDD NoSQL** à [Télécom Pa
 | Nom | GitHub |
 |-----|--------|
 | Tahiana Hajanirina Andriambahoaka | [@tahianahajanirina](https://github.com/tahianahajanirina) |
-| Mohammed Ammar | [@mohamedbebay1-sys](https://github.com/mohamedbebay1-sys) |
+| Mohamed Amar | [@mohamedbebay1-sys](https://github.com/mohamedbebay1-sys) |
 | Lounis Hamroun | [@lounishamroun](https://github.com/lounishamroun) |
