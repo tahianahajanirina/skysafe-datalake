@@ -8,7 +8,7 @@ def format_weather_main(spark=None) -> str:
     Lit weather_raw.json (data/raw/open_meteo/weather/date=.../hour=.../)
     et crée un Parquet nettoyé dans data/formatted/open_meteo/weather/.
     """
-    spark = spark or get_spark(app_name="format_weather")
+    spark = spark or get_spark()
 
     # Lecture des fichier JSON depuis la dernière partition
     partition_dir = latest_partition("raw", "open_meteo", "weather")
