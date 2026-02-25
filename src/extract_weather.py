@@ -4,11 +4,9 @@ extract_weather.py
 Extraction des données météo depuis l'API Open-Meteo.
 Sauvegarde en JSON dans : data/raw/open_meteo/weather/date=.../hour=.../
 """
-
 import os
 from datetime import datetime
 from typing import Dict, List, Optional
-
 import requests
 
 from helpers import (
