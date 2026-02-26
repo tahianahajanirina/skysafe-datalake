@@ -44,7 +44,7 @@ Placez-vous à la racine du projet et montez les conteneurs Docker (Airflow, Pos
 
 ### Étape 2 : Accéder aux interfaces
 Une fois les conteneurs démarrés, les services sont accessibles aux adresses suivantes :
-* **Apache Airflow :** http://localhost:8080 (Identifiants : admin / admin)
+* **Apache Airflow :** http://localhost:8090 (Identifiants : admin / admin)
 * **Kibana (Dashboard) :** http://localhost:5601
 * **Elasticsearch :** http://localhost:9200
 
@@ -66,7 +66,7 @@ La commande `docker-compose up -d --build` a construit l'image Docker, branché 
 L'usine tourne en arrière-plan (c'est le rôle du `-d` pour *detached*).
 
 1. Ouvrez votre navigateur.
-2. Accédez à `http://localhost:8080` (Airflow) et `http://localhost:5601` (Kibana).
+2. Accédez à `http://localhost:8090` (Airflow) et `http://localhost:5601` (Kibana).
 3. Si les pages s'affichent, l'infrastructure est opérationnelle.
 
 ### 2. Modification du code Python (`src/` ou `dags/`)
