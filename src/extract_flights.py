@@ -13,6 +13,7 @@ from helpers import (
     http_get,
     http_post,
     build_raw_path,
+    join_path,
     save_json,
     logger,
 )
@@ -25,16 +26,13 @@ from serverless_function_call import fetch_flights_from_lambda
 SKY_NETWORK_BASE_URL: str = os.getenv(
     "SKY_NETWORK_BASE_URL", "https://opensky-network.org/api"
 )
-SKY_NETWORK_TOKEN_URL: str = (
+SKY_NETWORK_TOKEN_URL: str = os.getenv(
+    "SKY_NETWORK_TOKEN_URL",
     "https://auth.opensky-network.org/auth/realms/opensky-network"
-    "/protocol/openid-connect/token"
+    "/protocol/openid-connect/token",
 )
-SKY_NETWORK_CLIENT_ID: str = os.getenv(
-    "SKY_NETWORK_CLIENT_ID", "tahiana-api-client"
-)
-SKY_NETWORK_CLIENT_SECRET: str = os.getenv(
-    "SKY_NETWORK_CLIENT_SECRET", "OfiQ7YzZIJyBLAaqKHYb0BMx3LXXKKwK"
-)
+SKY_NETWORK_CLIENT_ID: str = os.getenv("SKY_NETWORK_CLIENT_ID", "")
+SKY_NETWORK_CLIENT_SECRET: str = os.getenv("SKY_NETWORK_CLIENT_SECRET", "")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -73,7 +71,7 @@ def fetch_flights(token: str) -> str:
 
     ts = datetime.utcnow()
     output_dir = build_raw_path("opensky", "flights", ts)
-    filepath = os.path.join(output_dir, "flights_raw.json")
+    filepath = join_path(output_dir, "flights_raw.json")
     save_json(raw_data, filepath)
 
     nb_flights = len(raw_data.get("states") or [])
@@ -98,7 +96,7 @@ def extract_flights_main() -> None:
 
     ts = datetime.utcnow()
     output_dir = build_raw_path("opensky", "flights", ts)
-    filepath = os.path.join(output_dir, "flights_raw.json")
+    filepath = join_path(output_dir, "flights_raw.json")
     save_json(raw_data, filepath)
 
     nb_flights = len(raw_data.get("states") or [])

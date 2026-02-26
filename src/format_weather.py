@@ -1,6 +1,4 @@
-import json
-import os
-from helpers import get_spark, latest_partition, output_path, logger
+from helpers import get_spark, latest_partition, output_path, join_path, read_json, logger
 
 
 def format_weather_main(spark=None) -> str:
@@ -12,10 +10,9 @@ def format_weather_main(spark=None) -> str:
 
     # Lecture des fichier JSON depuis la dernière partition
     partition_dir = latest_partition("raw", "open_meteo", "weather")
-    filepath = os.path.join(partition_dir, "weather_raw.json")
+    filepath = join_path(partition_dir, "weather_raw.json")
     logger.info("Lecture du fichier brut : %s", filepath)
-    with open(filepath, "r", encoding="utf-8") as f:
-        raw_points = json.load(f)  # liste de dicts (un par point géographique)
+    raw_points = read_json(filepath)  # liste de dicts (un par point géographique)
 
     records = []
     for point in raw_points:

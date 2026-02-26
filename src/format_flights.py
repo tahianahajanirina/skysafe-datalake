@@ -5,8 +5,6 @@ Job Spark : raw/opensky/flights → formatted/opensky/flights
 Dépend uniquement de : extract_flights
 """
 
-import json
-import os
 from typing import Any, Dict, List, Optional
 
 from pyspark.sql import functions as F
@@ -15,7 +13,7 @@ from pyspark.sql.types import (
     StringType, DoubleType, BooleanType, IntegerType
 )
 
-from helpers import get_spark, latest_partition, output_path, logger
+from helpers import get_spark, latest_partition, output_path, join_path, read_json, logger
 
 
 def _safe_get(state: list, idx: int):
@@ -54,16 +52,12 @@ def format_flights_main(spark=None) -> str:
 
     # 1) Trouver le dernier dossier raw
     raw_dir = latest_partition("raw", "opensky", "flights")
-    raw_file = os.path.join(raw_dir, "flights_raw.json")
+    raw_file = join_path(raw_dir, "flights_raw.json")
 
     logger.info("Lecture raw flights depuis: %s", raw_file)
 
-    if not os.path.exists(raw_file):
-        raise FileNotFoundError(f"Fichier introuvable: {raw_file}")
-
-    # 2) Lire le JSON brut
-    with open(raw_file, "r", encoding="utf-8") as f:
-        payload = json.load(f)
+    # 2) Lire le JSON brut (S3 ou local)
+    payload = read_json(raw_file)
 
     observation_time = payload.get("time")          # timestamp global (epoch sec)
     extracted_at = payload.get("_extracted_at")     # ISO string ajouté à l'extract

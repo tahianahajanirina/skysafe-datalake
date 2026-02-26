@@ -18,6 +18,10 @@ x-airflow-env: &airflow-env
   # Supprime le warning Hadoop natif de Spark
   SPARK_HOME_WARN: 'false'
   HADOOP_HOME: '/tmp'
+  S3_BUCKET: 'data705-opensky-datalake'
+  AWS_ACCESS_KEY_ID: '${AWS_ACCESS_KEY_ID}'
+  AWS_SECRET_ACCESS_KEY: '${AWS_SECRET_ACCESS_KEY}'
+  AWS_DEFAULT_REGION: '${AWS_DEFAULT_REGION}'
 
 # 2. ON DÉFINIT LA RECETTE DE BASE AIRFLOW
 x-airflow-common: &airflow-common
@@ -50,9 +54,12 @@ services:
   # (s'exécute une seule fois, les autres services attendent sa complétion)
   airflow-init:
     <<: *airflow-common
-    environment: *airflow-env
+    environment:
+      <<: *airflow-env
+      AIRFLOW_ADMIN_USER: '${AIRFLOW_ADMIN_USER}'
+      AIRFLOW_ADMIN_PASSWORD: '${AIRFLOW_ADMIN_PASSWORD}'
     command: >
-      bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@skysafe.local"
+      bash -c "airflow db migrate && airflow users create --username $$AIRFLOW_ADMIN_USER --password $$AIRFLOW_ADMIN_PASSWORD --firstname Admin --lastname User --role Admin --email admin@skysafe.local"
 
   # L'INTERFACE WEB AIRFLOW
   airflow-webserver:
