@@ -1,3 +1,5 @@
+from pyspark.sql import functions as F
+
 from helpers import get_spark, latest_partition, output_path, join_path, read_json, logger
 
 
@@ -39,6 +41,17 @@ def format_weather_main(spark=None) -> str:
     logger.info("%d points météo transformés en records", len(records))
 
     df = spark.createDataFrame(records)
+
+    # Normalisation des dates en UTC
+    # weather_time arrive en string ISO local (ex: "2026-02-26T14:00") → timestamp UTC
+    # extracted_at arrive en string ISO UTC → timestamp UTC
+    spark.conf.set("spark.sql.session.timeZone", "UTC")
+
+    df = (
+        df
+        .withColumn("weather_time", F.to_utc_timestamp(F.to_timestamp("weather_time"), "UTC"))
+        .withColumn("extracted_at", F.to_utc_timestamp(F.to_timestamp("extracted_at"), "UTC"))
+    )
 
     dest = output_path("formatted", "open_meteo", "weather")
     df.write.mode("overwrite").parquet(dest)

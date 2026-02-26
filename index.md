@@ -18,7 +18,8 @@
    - 6.3 [Formatage des vols avec Spark](#63-formatage-des-vols-avec-spark)
    - 6.4 [Formatage de la météo avec Spark](#64-formatage-de-la-météo-avec-spark)
    - 6.5 [Croisement spatial et Score de Risque](#65-croisement-spatial-et-score-de-risque)
-   - 6.6 [Indexation dans Elasticsearch](#66-indexation-dans-elasticsearch)
+   - 6.6 [Machine Learning — Classification des phases de vol et détection d'anomalies](#66-machine-learning--classification-des-phases-de-vol-et-détection-danomalies)
+   - 6.7 [Indexation dans Elasticsearch](#67-indexation-dans-elasticsearch)
 7. [Orchestration avec Apache Airflow](#7-orchestration-avec-apache-airflow)
 8. [Visualisation avec Kibana](#8-visualisation-avec-kibana)
 9. [Infrastructure Docker](#9-infrastructure-docker)
@@ -31,9 +32,9 @@
 
 ## 1. Introduction et problématique métier
 
-**Comment identifier automatiquement les avions commerciaux qui traversent des zones de turbulences intenses ou d'orages, afin d'optimiser la sécurité des vols ?**
+**Comment identifier automatiquement les avions commerciaux qui traversent des zones de turbulences intenses ou d'orages, et détecter les comportements de vol anormaux en temps réel ?**
 
-C'est la question à laquelle Sky-Safe répond. Le projet ingère en quasi temps-réel les positions GPS de milliers d'avions en vol au-dessus de la France, les croise avec les conditions météorologiques locales (vent, pluie, orages, visibilité…), puis calcule un **Score de Risque** pour chaque aéronef. Le tout est exposé sur un tableau de bord interactif Kibana, permettant aux opérateurs de visualiser d'un coup d'œil les zones dangereuses.
+C'est la question à laquelle Sky-Safe répond. Le projet ingère en quasi temps-réel les positions GPS de milliers d'avions en vol au-dessus de la France, les croise avec les conditions météorologiques locales (vent, pluie, orages, visibilité…), puis calcule un **Score de Risque** pour chaque aéronef. En parallèle, un modèle de **Machine Learning** (K-Means) classifie automatiquement la phase de vol de chaque avion (décollage, croisière, montée/descente) et détecte les **anomalies comportementales** — des avions dont la cinématique s'écarte significativement du trafic global. Le tout est exposé sur un tableau de bord interactif Kibana, permettant aux opérateurs de visualiser d'un coup d'œil les zones dangereuses et les vols suspects.
 
 Le pipeline s'exécute **toutes les minutes**, garantissant une vision quasi temps-réel de la situation aérienne.
 
@@ -46,10 +47,10 @@ Le flux de données suit une architecture **ETL (Extract → Transform → Load)
 ```
   extract_flights ──► format_flights_spark ──┐
                                               ├──► combine_data_spark ──► index_to_elastic
-  extract_weather ──► format_weather_spark ──┘
+  extract_weather ──► format_weather_spark ──┘       (jointure + ML)
 ```
 
-**Les deux branches d'extraction s'exécutent en parallèle**, ce qui réduit le temps total d'une exécution du pipeline. La jointure spatiale (combine) ne démarre qu'une fois les deux branches de formatage terminées avec succès.
+**Les deux branches d'extraction s'exécutent en parallèle**, ce qui réduit le temps total d'une exécution du pipeline. La jointure spatiale et le traitement Machine Learning (combine) ne démarrent qu'une fois les deux branches de formatage terminées avec succès. Le ML s'intègre naturellement dans l'étape de combinaison : après la jointure vols × météo et le calcul du score de risque, Spark entraîne un modèle K-Means pour classer les phases de vol et détecter les anomalies, sans ajouter de tâche supplémentaire au DAG.
 
 ---
 
@@ -60,6 +61,7 @@ Le flux de données suit une architecture **ETL (Extract → Transform → Load)
 | **Orchestration** | Apache Airflow 2.7 | Planification et exécution automatique du pipeline |
 | **Extraction** | Python (Requests) | Appels HTTP vers les APIs OpenSky et Open-Meteo |
 | **Transformation** | Apache Spark (PySpark) | Nettoyage, typage, jointure spatiale, calcul du score |
+| **Machine Learning** | Spark MLlib (K-Means, StandardScaler) | Classification des phases de vol et détection d'anomalies |
 | **Stockage temporaire** | Amazon S3 | Data Lake cloud (architecture Medallion) |
 | **Base de données finale** | Elasticsearch 8.10 | Indexation et recherche des documents enrichis |
 | **Visualisation** | Kibana 8.10 | Dashboard interactif avec carte et graphiques |
@@ -210,9 +212,72 @@ Le score est traduit en catégorie :
 - **MEDIUM** : score ≥ 30
 - **LOW** : score < 30
 
-Le résultat est écrit en Parquet dans `enriched/sky_safe/flights_weather/`.
+Le résultat enrichi du score de risque est ensuite transmis à l'étape Machine Learning (section suivante) avant écriture finale en Parquet.
 
-### 6.6 Indexation dans Elasticsearch
+### 6.6 Machine Learning — Classification des phases de vol et détection d'anomalies
+
+**Fichier** : `src/combine_spark.py` (intégré dans le même job Spark que le croisement spatial)
+
+L'API OpenSky ne fournit aucune information sur la **phase de vol** d'un avion (est-il en train de décoller, de monter, de croiser ou d'atterrir ?). De même, elle ne signale pas les comportements anormaux. Sky-Safe utilise le Machine Learning pour déduire automatiquement ces informations à partir des données brutes de cinématique.
+
+#### Approche hybride : K-Means + fallback par règles métier
+
+Le modèle fonctionne selon une approche **hybride** qui s'adapte à la distribution réelle du trafic à l'instant T :
+
+1. **Entraînement K-Means** : à chaque exécution du pipeline, un modèle K-Means (k=3) est entraîné sur les vecteurs normalisés `(velocity, baro_altitude, vertical_rate)` de tous les avions en vol
+2. **Vérification de qualité** : la distance maximale entre les centroïdes des 3 clusters est calculée. Si elle dépasse le seuil `MIN_CENTROID_SEPARATION = 1.0` (en espace normalisé), les clusters sont considérés comme significatifs
+3. **Deux modes de classification** :
+
+| Mode | Condition | Logique |
+|---|---|---|
+| **K-Means** | Clusters bien séparés (distance max ≥ 1.0) | Labellisation automatique par altitude moyenne croissante : cluster le plus bas → *Takeoff / Landing*, intermédiaire → *Climb / Descent*, le plus haut → *Cruise* |
+| **Règles métier** (fallback) | Clusters trop proches (distance max < 1.0) — ex. la nuit, quasi tous les avions sont en croisière | Seuils aéronautiques fixes : altitude < 300 m + vitesse < 60 m/s → *Takeoff / Landing*, altitude > 3 000 m + taux vertical quasi nul → *Cruise*, sinon → *Climb / Descent* |
+
+**Pourquoi cette approche hybride ?** Le K-Means force toujours k clusters, même si les données sont homogènes. À 3 h du matin, quand tous les avions survolant la France sont des long-courriers en croisière stable, le K-Means découperait artificiellement ce groupe en 3 sous-groupes sans signification. Le mécanisme de vérification détecte cette situation et bascule sur des règles métier fiables.
+
+#### Pipeline ML Spark
+
+```python
+# VectorAssembler → StandardScaler → KMeans
+assembler = VectorAssembler(inputCols=["velocity", "baro_altitude", "vertical_rate"], outputCol="features")
+scaler = StandardScaler(inputCol="features", outputCol="scaled_features", withStd=True, withMean=True)
+kmeans = KMeans(featuresCol="scaled_features", k=3, seed=42, maxIter=20)
+
+pipeline = Pipeline(stages=[assembler, scaler, kmeans])
+model = pipeline.fit(df)
+df_clustered = model.transform(df)
+```
+
+La normalisation via `StandardScaler` est essentielle : sans elle, l'altitude (valeurs en milliers de mètres) dominerait complètement la vitesse et le taux vertical dans le calcul des distances.
+
+#### Détection d'anomalies par distance au centroïde
+
+Une fois les clusters formés, chaque avion possède un centroïde de référence (le centre de son cluster). La **distance euclidienne** entre l'avion et son centroïde (en espace normalisé) mesure à quel point cet avion s'écarte du comportement typique de son groupe :
+
+$$\text{anomaly\_score} = \sqrt{(v - c_v)^2 + (a - c_a)^2 + (r - c_r)^2}$$
+
+où $(v, a, r)$ sont les features normalisées du vol et $(c_v, c_a, c_r)$ les coordonnées du centroïde.
+
+Le seuil d'anomalie est calculé dynamiquement sur la distribution des distances :
+
+$$\text{seuil} = \mu_d + 2 \times \sigma_d$$
+
+Tout vol dont l'`anomaly_score` dépasse ce seuil est marqué `is_anomaly = True`. En statistique, cela correspond environ aux **5 % de vols les plus atypiques** dans la distribution.
+
+**Exemple concret** : un avion classé « Cruise » (haute altitude) mais qui vole anormalement lentement avec un fort taux de descente sera très éloigné du centroïde de croisière → anomalie détectée. Cela peut indiquer un problème mécanique, une manœuvre d'urgence, ou un déroutement.
+
+#### Colonnes produites par le ML
+
+| Colonne | Type | Description |
+|---|---|---|
+| `flight_phase` | keyword | Phase de vol déduite : *Takeoff / Landing*, *Climb / Descent* ou *Cruise* |
+| `flight_phase_id` | integer | Identifiant numérique du cluster (0, 1 ou 2) |
+| `is_anomaly` | boolean | `true` si le vol est détecté comme anomalie |
+| `anomaly_score` | float | Distance au centroïde — plus c'est élevé, plus le comportement est atypique |
+
+Le résultat complet (score de risque + ML) est écrit en Parquet dans `enriched/sky_safe/flights_weather/`.
+
+### 6.7 Indexation dans Elasticsearch
 
 **Fichier** : `src/index_elastic.py`
 
@@ -223,7 +288,7 @@ Ce module opère en deux phases :
 **Phase 2 — Bulk Insert** :
 1. Lecture de la couche Usage
 2. Conversion de chaque row en document ES : fusion `latitude`/`longitude` en un champ `location` de type `geo_point` (requis par Kibana Maps)
-3. Création de l'index avec un mapping explicite si inexistant (types `keyword`, `float`, `geo_point`, `date`…)
+3. Création de l'index avec un mapping explicite si inexistant (types `keyword`, `float`, `geo_point`, `date`, `boolean`…). Le mapping inclut les champs ML : `flight_phase` (keyword), `flight_phase_id` (integer), `is_anomaly` (boolean) et `anomaly_score` (float)
 4. Indexation en masse via l'API `bulk` d'Elasticsearch
 
 L'identifiant `_id` de chaque document est l'`icao24` de l'avion, ce qui fait qu'un avion est **mis à jour à chaque exécution** plutôt que dupliqué.
@@ -266,10 +331,13 @@ Cela permet une mise en place 100% automatique du dashboard dès la première ex
 
 Le dashboard Kibana est importé automatiquement depuis un fichier NDJSON (`src/dashboard/kibana_dashboard_config.ndjson`) et offre une vue interactive sur :
 
-- **Carte géographique** : position de chaque avion avec code couleur selon le `risk_category`
+- **Carte géographique** : position de chaque avion avec code couleur selon le `risk_category` ou la `flight_phase` (phase de vol déduite par le ML)
+- **Carte des anomalies** : les avions normaux apparaissent en vert, les anomalies détectées par le modèle ML en rouge vif — un contrôleur aérien identifie immédiatement les vols suspects
 - **Distribution des scores de risque** : histogramme et statistiques
+- **Distribution des phases de vol** : répartition circulaire (pie chart) *Takeoff / Landing*, *Climb / Descent*, *Cruise* — permet de voir d'un coup d'œil la composition du trafic
+- **Histogramme des anomaly scores** : visualise la distribution des distances au centroïde et le seuil au-delà duquel un vol est considéré comme atypique
 - **Conditions météo en temps réel** : vent, visibilité, précipitations par zone
-- **Tableau détaillé** : callsign, pays, altitude, vitesse, score, catégorie
+- **Tableau détaillé** : callsign, pays, altitude, vitesse, score, catégorie, phase de vol, anomalie
 
 Le champ `location` (type `geo_point`) est la clé technique qui permet l'affichage cartographique dans Kibana Maps.
 
@@ -382,6 +450,8 @@ Sky-Safe démontre qu'il est possible de construire un pipeline Big Data **compl
 Les choix techniques clés qui ont fait la différence :
 - **Parallélisme des extractions** dans le DAG Airflow (les deux APIs sont interrogées simultanément)
 - **Formule de Haversine en Spark natif** (pas de UDF Python coûteuse)
+- **Machine Learning hybride** : K-Means pour la classification des phases de vol quand le trafic est hétérogène, fallback automatique sur des règles métier aéronautiques quand les données sont homogènes (évite les faux clusters)
+- **Détection d'anomalies sans supervision** : la distance euclidienne au centroïde K-Means, combinée à un seuil statistique dynamique ($\mu + 2\sigma$), identifie les vols au comportement atypique sans avoir besoin de données labellisées
 - **Partitionnement temporel sur S3** (retrouver la dernière partition en O(1) via l'API S3)
 - **Indexation par `icao24`** dans Elasticsearch (upsert naturel, pas de doublons)
 - **Setup automatique de Kibana** via un DAG sensor (zéro intervention manuelle)

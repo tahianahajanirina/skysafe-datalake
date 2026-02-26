@@ -132,13 +132,21 @@ def format_flights_main(spark=None) -> str:
     # 5) Nettoyage minimum obligatoire
     df = df.filter(F.col("latitude").isNotNull() & F.col("longitude").isNotNull())
 
-    # 6) Conversion timestamps (epoch -> timestamp)
+    # 6) Normalisation des dates en UTC (epoch -> timestamp UTC)
+    #    from_unixtime produit un timestamp dans le TZ du système par défaut.
+    #    On force la session Spark en UTC puis on convertit explicitement.
+    spark.conf.set("spark.sql.session.timeZone", "UTC")
+
     df = (
         df
-        .withColumn("observation_time", F.to_timestamp(F.from_unixtime(F.col("observation_time_epoch"))))
-        .withColumn("time_position", F.to_timestamp(F.from_unixtime(F.col("time_position_epoch"))))
-        .withColumn("last_contact", F.to_timestamp(F.from_unixtime(F.col("last_contact_epoch"))))
-        .withColumn("extracted_at", F.to_timestamp("extracted_at_str"))
+        .withColumn("observation_time", F.to_utc_timestamp(
+            F.to_timestamp(F.from_unixtime(F.col("observation_time_epoch"))), "UTC"))
+        .withColumn("time_position", F.to_utc_timestamp(
+            F.to_timestamp(F.from_unixtime(F.col("time_position_epoch"))), "UTC"))
+        .withColumn("last_contact", F.to_utc_timestamp(
+            F.to_timestamp(F.from_unixtime(F.col("last_contact_epoch"))), "UTC"))
+        .withColumn("extracted_at", F.to_utc_timestamp(
+            F.to_timestamp("extracted_at_str"), "UTC"))
         .drop("observation_time_epoch", "time_position_epoch", "last_contact_epoch", "extracted_at_str")
     )
 
