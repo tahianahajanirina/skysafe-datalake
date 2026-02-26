@@ -51,6 +51,12 @@ INDEX_MAPPING = {
             # Score de risque
             "risk_score":    {"type": "integer"},
             "risk_category": {"type": "keyword"},
+            # Machine Learning — Phase de vol (K-Means)
+            "flight_phase":    {"type": "keyword"},
+            "flight_phase_id": {"type": "integer"},
+            # Machine Learning — Détection d'anomalies
+            "is_anomaly":    {"type": "boolean"},
+            "anomaly_score": {"type": "float"},
         }
     }
 }
@@ -106,6 +112,12 @@ def prepare_usage(spark=None) -> str:
         # Score
         F.col("risk_score"),
         F.col("risk_category"),
+        # Machine Learning — Phase de vol
+        F.col("flight_phase"),
+        F.col("flight_phase_id"),
+        # Machine Learning — Anomalies
+        F.col("is_anomaly"),
+        F.col("anomaly_score"),
         # Méta
         F.col("extracted_at"),
     )
