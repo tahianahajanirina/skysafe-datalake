@@ -16,7 +16,7 @@ from helpers import (
     save_json,
     logger,
 )
-from lambda_function_test import fetch_flights_from_lambda
+from serverless_function_call import fetch_flights_from_lambda
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION

@@ -6,7 +6,7 @@ import requests
 # ─── Configuration ────────────────────────────────────────────────────────────
 KIBANA_URL = os.getenv("KIBANA_URL", "http://kibana:5601")
 IMPORT_ENDPOINT = f"{KIBANA_URL}/api/saved_objects/_import?overwrite=true"
-NDJSON_PATH = "/opt/airflow/src/dashboard/kibana_dashboard.ndjson"
+NDJSON_PATH = "/opt/airflow/src/dashboard/kibana_dashboard_config.ndjson"
 MAX_RETRIES = 12          # Kibana peut mettre du temps à démarrer
 RETRY_DELAY_SEC = 10
 

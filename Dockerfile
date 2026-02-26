@@ -10,9 +10,12 @@ RUN apt-get update \
 ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# 3. On revient à l'utilisateur Airflow (sécurité)
+# 3. Pré-créer le dossier data monté en volume (permissions ouvertes)
+RUN mkdir -p /opt/airflow/data && chmod 777 /opt/airflow/data
+
+# 4. On revient à l'utilisateur Airflow (sécurité)
 USER airflow
 
-# 4. On copie et installe les dépendances Python
+# 5. On copie et installe les dépendances Python
 COPY requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt

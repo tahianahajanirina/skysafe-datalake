@@ -35,7 +35,3 @@ def fetch_flights_from_lambda():
         print(f"Détails : {response.text}")
     except Exception as err:
         print(f"Erreur réseau (Le camion n'a pas pu atteindre AWS) : {err}")
-
-# # Lancement du test
-# if __name__ == "__main__":
-#     vols_json = fetch_flights_from_lambda()
