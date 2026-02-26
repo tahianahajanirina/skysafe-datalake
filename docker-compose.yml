@@ -22,6 +22,7 @@ x-airflow-env: &airflow-env
 # 2. ON DÉFINIT LA RECETTE DE BASE AIRFLOW
 x-airflow-common: &airflow-common
   build: .
+  user: "${MY_UID:-1000}:0"
   environment: *airflow-env
   volumes:
     - ./dags:/opt/airflow/dags

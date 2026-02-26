@@ -16,7 +16,6 @@ from helpers import (
     save_json,
     logger,
 )
-from lambda_function_test import fetch_flights_from_lambda
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION
@@ -87,20 +86,7 @@ def fetch_flights(token: str) -> str:
 
 def extract_flights_main() -> None:
     """Point d'entrée pour la tâche Airflow 'extract_flights_api'."""
-    logger.info("=== Démarrage extraction VOLS (via Lambda) ===")
-
-    raw_data = fetch_flights_from_lambda()
-    if raw_data is None:
-        logger.error("Échec de l'extraction via Lambda — aucune donnée reçue.")
-        raise RuntimeError("La Lambda n'a retourné aucune donnée.")
-
-    raw_data["_extracted_at"] = datetime.utcnow().isoformat()
-
-    ts = datetime.utcnow()
-    output_dir = build_raw_path("opensky", "flights", ts)
-    filepath = os.path.join(output_dir, "flights_raw.json")
-    save_json(raw_data, filepath)
-
-    nb_flights = len(raw_data.get("states") or [])
-    logger.info("Vols extraits via Lambda : %d", nb_flights)
+    logger.info("=== Démarrage extraction VOLS ===")
+    token = get_opensky_token()
+    filepath = fetch_flights(token)
     logger.info("=== Extraction VOLS terminée → %s ===", filepath)
