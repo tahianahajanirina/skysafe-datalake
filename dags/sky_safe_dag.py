@@ -30,6 +30,7 @@ with DAG(
     description='Pipeline Big Data : Vols (OpenSky) x Météo (Open-Meteo) -> Elasticsearch',
     schedule='*/2 * * * *',
     catchup=False,
+    max_active_runs=1,
     tags=['sky_safe', 'production'],
 ) as dag:
 

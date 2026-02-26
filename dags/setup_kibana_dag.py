@@ -61,6 +61,7 @@ with DAG(
     description="One-shot : importe le dashboard Kibana après la première indexation ES",
     schedule="@once",
     catchup=False,
+    max_active_runs=1,
     tags=["sky_safe", "setup"],
 ) as dag:
 
