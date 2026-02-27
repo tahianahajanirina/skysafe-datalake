@@ -288,14 +288,22 @@ docker-compose down -v
 
 ## Tests
 
-Le projet inclut des tests unitaires et d'intégration dans le dossier `tests/` :
+Le projet inclut **42 tests** couvrant les fonctions critiques du pipeline :
+
+| Fichier | Ce qui est testé |
+|---|---|
+| `test_format_flights.py` | Helpers pure-Python : `_safe_get`, `_to_float`, `_clean_callsign` |
+| `test_haversine.py` | Expression Spark Haversine (distances réelles, symétrie) |
+| `test_risk_score.py` | Score de risque composite + catégorisation LOW / MEDIUM / HIGH |
+| `test_index_elastic.py` | Transformation `_row_to_es_doc` + mapping Elasticsearch |
 
 ```bash
-# Tests unitaires
-python -m pytest tests/unit_tests/
+# En local (les tests Spark sont auto-skippés si Java n'est pas installé)
+pip install -r requirements.txt pytest
+pytest
 
-# Tests d'intégration (nécessite les APIs accessibles)
-python -m pytest tests/integration_tests/
+# Via Docker (tous les tests passent, Java inclus dans l'image)
+docker compose run --rm airflow-worker pytest
 ```
 
 ---
