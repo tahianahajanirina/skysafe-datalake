@@ -1,461 +1,204 @@
-# Sky-Safe : Construire un Data Lake temps-réel pour l'analyse des risques météorologiques dans le trafic aérien
+# SkySafe : Comment nous avons construit un Data Lake pour traquer les vols aériens en temps réel et détecter les anomalies grâce au Machine Learning
 
-> **Projet réalisé dans le cadre du cours DATA705 — BDD NoSQL à Télécom Paris**
-> Par Tahiana Hajanirina Andriambahoaka, Mohamed Amar et Lounis Hamroun
-
----
-
-## Table des matières
-
-1. [Introduction et problématique métier](#1-introduction-et-problématique-métier)
-2. [Architecture globale du pipeline](#2-architecture-globale-du-pipeline)
-3. [Stack technique](#3-stack-technique)
-4. [Sources de données — Les APIs](#4-sources-de-données--les-apis)
-5. [Organisation du Data Lake — Architecture Medallion](#5-organisation-du-data-lake--architecture-medallion)
-6. [Le pipeline étape par étape](#6-le-pipeline-étape-par-étape)
-   - 6.1 [Extraction des données de vols (OpenSky via Lambda)](#61-extraction-des-données-de-vols-opensky-via-lambda)
-   - 6.2 [Extraction des données météo (Open-Meteo)](#62-extraction-des-données-météo-open-meteo)
-   - 6.3 [Formatage des vols avec Spark](#63-formatage-des-vols-avec-spark)
-   - 6.4 [Formatage de la météo avec Spark](#64-formatage-de-la-météo-avec-spark)
-   - 6.5 [Croisement spatial et Score de Risque](#65-croisement-spatial-et-score-de-risque)
-   - 6.6 [Machine Learning — Classification des phases de vol et détection d'anomalies](#66-machine-learning--classification-des-phases-de-vol-et-détection-danomalies)
-   - 6.7 [Indexation dans Elasticsearch](#67-indexation-dans-elasticsearch)
-7. [Orchestration avec Apache Airflow](#7-orchestration-avec-apache-airflow)
-8. [Visualisation avec Kibana](#8-visualisation-avec-kibana)
-9. [Infrastructure Docker](#9-infrastructure-docker)
-10. [Sécurité — Gestion des secrets](#10-sécurité--gestion-des-secrets)
-11. [Stockage Cloud — Amazon S3](#11-stockage-cloud--amazon-s3)
-12. [Serverless — Appel de fonction Lambda](#12-serverless--appel-de-fonction-lambda)
-13. [Déploiement sur le Cloud — Problèmes rencontrés](#13-déploiement-sur-le-cloud--problèmes-rencontrés)
+> **Par [Tahiana Hajanirina Andriambahoaka](https://github.com/tahianahajanirina), [Mohamed Amar](https://github.com/mohamedbebay1-sys) et [Lounis Hamroun](https://github.com/lounishamroun)** · Février 2026<br>
+> Projet réalisé dans le cadre du cours *DATA705 — BDD NoSQL* à Télécom Paris
 
 ---
 
-## 1. Introduction et problématique métier
+Chaque jour, **des milliers d'avions** survolent la France. Avec les orages, les descentes brutales des avions, les vitesses anormalement faibles en altitude : comment repérer automatiquement **en quelques secondes** les vols à risque ?
 
-**Comment identifier automatiquement les avions commerciaux qui traversent des zones de turbulences intenses ou d'orages, et détecter les comportements de vol anormaux en temps réel ?**
+C'est la question que nous nous sommes posée en lançant **SkySafe**. Un pipeline Big Data qui ingère en quasi temps-réel les positions GPS de tous les avions au-dessus de la France, les croise avec la météo locale, calcule un **score de risque** pour chaque vol, et utilise le **Machine Learning** pour détecter automatiquement les comportements suspects.
 
-C'est la question à laquelle Sky-Safe répond. Le projet ingère en quasi temps-réel les positions GPS de milliers d'avions en vol au-dessus de la France, les croise avec les conditions météorologiques locales (vent, pluie, orages, visibilité…), puis calcule un **Score de Risque** pour chaque aéronef. En parallèle, un modèle de **Machine Learning** (K-Means) classifie automatiquement la phase de vol de chaque avion (décollage, croisière, montée/descente) et détecte les **anomalies comportementales** — des avions dont la cinématique s'écarte significativement du trafic global. Le tout est exposé sur un tableau de bord interactif Kibana, permettant aux opérateurs de visualiser d'un coup d'œil les zones dangereuses et les vols suspects.
+Toutes les informations nécessaires au suivi des vols sont regroupées dans un **unique dashboard Kibana** : chaque avion y apparaît avec ses principales données, un indicateur de vols **normaux** ou **à risque**, ainsi que la mise en évidence des **anomalies** détectées.
 
-Le pipeline s'exécute **toutes les minutes**, garantissant une vision quasi temps-réel de la situation aérienne.
+Dans cet article, découvrez la conception de ce système, les principaux obstacles rencontrés, et les solutions mises en place pour les surmonter.
 
 ---
+## L'Architecture : un pipeline en 4 étapes
 
-## 2. Architecture globale du pipeline
+Avant de plonger dans les détails, voici la vue d'ensemble. Notre pipeline suit le modèle `Raw → Formatted → Enriched → Usage`, orchestré par Airflow et alimenté en parallèle par deux sources de données :
 
-Le flux de données suit une architecture **ETL (Extract → Transform → Load)** orchestrée par Airflow et structurée selon le modèle **Medallion** (Raw → Formatted → Enriched → Usage) :
-
-```
-  extract_flights ──► format_flights_spark ──┐
-                                              ├──► combine_data_spark ──► index_to_elastic
-  extract_weather ──► format_weather_spark ──┘       (jointure + ML)
+```text
+API Vols (OpenSky)     ──>  Nettoyage / Formatage (Spark)   ──┐
+                                                              ├─>  Croisement + ML (Spark)  ──> Elasticsearch
+API Météo (Open-Meteo) ──>  Nettoyage / Formatage (Spark)   ──┘
 ```
 
-**Les deux branches d'extraction s'exécutent en parallèle**, ce qui réduit le temps total d'une exécution du pipeline. La jointure spatiale et le traitement Machine Learning (combine) ne démarrent qu'une fois les deux branches de formatage terminées avec succès. Le ML s'intègre naturellement dans l'étape de combinaison : après la jointure vols × météo et le calcul du score de risque, Spark entraîne un modèle K-Means pour classer les phases de vol et détecter les anomalies, sans ajouter de tâche supplémentaire au DAG.
+Les principaux outils qui font tourner ce pipeline :
+
+- **Apache Airflow** : le chef d'orchestre qui déclenche le pipeline toutes les minutes et gère toute la coordination entre les différentes tâches.
+- **Amazon S3** : stockage centralisé de toutes les données brutes (JSON) et transformées (Parquet).
+- **Apache Spark (PySpark)** : moteur de traitement responsable du nettoyage, de la normalisation, du croisement des données et du calcul des scores de risque.
+- **Elasticsearch** : base de données qui indexe les données enrichies pour la recherche en temps réel et la visualisation dans **Kibana**.
 
 ---
 
-## 3. Stack technique
+## Les sources de données
 
-| Composant | Technologie | Rôle |
-|---|---|---|
-| **Orchestration** | Apache Airflow 2.7 | Planification et exécution automatique du pipeline |
-| **Extraction** | Python (Requests) | Appels HTTP vers les APIs OpenSky et Open-Meteo |
-| **Transformation** | Apache Spark (PySpark) | Nettoyage, typage, jointure spatiale, calcul du score |
-| **Machine Learning** | Spark MLlib (K-Means, StandardScaler) | Classification des phases de vol et détection d'anomalies |
-| **Stockage temporaire** | Amazon S3 | Data Lake cloud (architecture Medallion) |
-| **Base de données finale** | Elasticsearch 8.10 | Indexation et recherche des documents enrichis |
-| **Visualisation** | Kibana 8.10 | Dashboard interactif avec carte et graphiques |
-| **Infrastructure** | Docker & Docker Compose | Conteneurisation de tous les services |
-| **Serverless** | Scaleway Functions (Lambda) | Proxy pour contourner les limites de l'API OpenSky |
+Pour construire notre système de surveillance, nous avions besoin de deux types d'informations : **où sont les avions** et **quel temps fait-il là où ils volent**.
 
----
+### Les vols : [OpenSky Network](https://openskynetwork.github.io/opensky-api/rest.html)
 
-## 4. Sources de données — Les APIs
+L'API **OpenSky Network** nous fournit en temps réel la position de chaque avion grâce à son transpondeur ADS-B : identifiant ICAO, callsign, latitude, longitude, altitude, vitesse, cap, taux de montée/descente, pays d'origine...
 
-### 4.1 OpenSky Network (données de vols)
+Nous filtrons les vols sur une **bounding box couvrant la France métropolitaine** pour réduire le volume de données à traiter.<br>
+Pour un usage non commercial, nous avons droit à **10K requêtes quotidiennes** gratuitement, ce qui est largement suffisant pour notre cas d'usage.
 
-L'API [OpenSky Network](https://openskynetwork.github.io/opensky-api/) fournit les positions en temps réel de tous les aéronefs équipés de transpondeurs ADS-B. Pour chaque avion, on obtient :
+### La météo : [Open-Meteo](https://open-meteo.com/en/docs)
 
-- **ICAO24** : identifiant unique du transpondeur
-- **Callsign** : indicatif d'appel du vol (ex : `AFR1234`)
-- **Latitude / Longitude** : position GPS
-- **Altitude barométrique et géométrique**
-- **Vitesse, cap, taux de montée/descente**
-- **Pays d'origine, statut au sol**
+L'API **Open-Meteo** nous donne les conditions météorologiques actuelles pour **6 zones stratégiques** couvrant la France métropolitaine : **Paris CDG, Toulouse, Lyon, Marseille, Nantes et Lille**.
 
-> **Problème rencontré** : l'API OpenSky impose des limites de débit strictes. Pour contourner cette contrainte, nous avons déployé une **fonction serverless (Lambda)** sur Scaleway qui sert de proxy et filtre les vols sur une bounding box couvrant la France métropolitaine (`[41.3, 51.1, -5.1, 9.6]`).
+Nous avons sélectionné ces 6 villes car elles constituent les **grands noeuds du trafic aérien français** : ce sont des zones à forte densité de vols, où les conditions météorologiques ont le plus d'impact sur la sécurité aérienne. Elles sont également **géographiquement bien réparties** sur l'ensemble du territoire, ce qui permet de couvrir des microclimats différents.
 
-### 4.2 Open-Meteo (données météo)
+Pour chaque station, on récupère la température, le vent, les rafales, la pluie, la visibilité, la couverture nuageuse et le code météo (qui indique notamment la présence d'un orage).
 
-L'API [Open-Meteo](https://open-meteo.com/en/docs) fournit gratuitement des données météorologiques de haute précision. Nous interrogeons les conditions **actuelles** pour 6 aéroports français majeurs :
+Par défaut, les utilisateurs anonymes disposent de **400 crédits API par jour**. En créant un compte et en effectuant des requêtes authentifiées, nous avons pu bénéficier de **4 000 appels par jour** — largement suffisant pour interroger ces 6 stations toutes les minutes.
 
-| Aéroport | Latitude | Longitude |
-|---|---|---|
-| Paris CDG | 48.71 | 2.21 |
-| Toulouse | 43.63 | 1.37 |
-| Lyon | 45.73 | 5.09 |
-| Marseille | 43.43 | 5.21 |
-| Nantes | 47.46 | -0.53 |
-| Lille | 50.56 | 3.09 |
-
-Les variables météo récupérées : **température, humidité relative, vitesse et direction du vent, rafales, précipitations, pluie, couverture nuageuse, code météo, visibilité**.
+L'idée est que pour chaque avion en vol, on lui associe les conditions météo de la **station la plus proche** grâce à la formule de Haversine (distance sur la sphère terrestre), puis on en déduit un niveau de risque.
 
 ---
 
-## 5. Organisation du Data Lake — Architecture Medallion
+## Le défi inattendu : quand l'API refuse de coopérer
 
-Toutes les données transitent par Amazon S3, organisées selon l'architecture **Medallion** (Bronze / Silver / Gold), que nous nommons ici **Raw / Formatted / Enriched / Usage** :
+C'est ici que les choses sont devenues intéressantes.
 
-```
-s3://data705-opensky-datalake/
-├── raw/                          ← Données brutes (JSON)
-│   ├── opensky/flights/date=YYYY-MM-DD/hour=HH/
-│   └── open_meteo/weather/date=YYYY-MM-DD/hour=HH/
-├── formatted/                    ← Données nettoyées (Parquet)
-│   ├── opensky/flights/date=YYYY-MM-DD/hour=HH/
-│   └── open_meteo/weather/date=YYYY-MM-DD/hour=HH/
-├── enriched/                     ← Jointure vols × météo (Parquet)
-│   └── sky_safe/flights_weather/date=YYYY-MM-DD/hour=HH/
-└── usage/                        ← Prêt pour Elasticsearch (Parquet)
-    └── sky_safe/dashboard/date=YYYY-MM-DD/hour=HH/
-```
+Durant les premières phases de développement, tout fonctionnait parfaitement en local : l'API OpenSky répondait en quelques secondes. Mais dès que nous avons déployé notre pipeline sur un serveur cloud (une instance EC2 AWS), **les requêtes ont commencé à échouer avec des erreurs `504 Timeout`**.
 
-**Pourquoi ce partitionnement `date=/hour=/` ?**
-- Permet de retrouver rapidement la dernière partition via l'API S3 (`list_objects_v2` avec `Delimiter`)
-- Facilite la rétention et le nettoyage des anciennes données
-- Chaque exécution du pipeline écrit dans sa propre partition, sans écraser les précédentes
+Après investigation, nous avons identifié le problème : OpenSky Network impose des limites de débit strictes et bloque activement les requêtes provenant des gros datacenters. Notre serveur se trouvait sur une plage d'adresses blacklistée. C'est d'ailleurs assumé publiquement dans la [documentation officielle de leur API](https://openskynetwork.github.io/opensky-api/) : 
+
+> *"Note that we may block AWS and other hyperscalers due to generalized abuse from these IPs."*
+
+Il fallait donc trouver une solution alternative pour contourner ce blocage, sans pour autant rapatrier le code en local. C'est là que l'architecture Serverless est venue à la rescousse.
+
+### Notre solution : une fonction Serverless comme relais
+
+Nous avons contourné le problème en déployant une **fonction serverless (Lambda) sur [Scaleway Cloud](https://www.scaleway.com/en/)**. Cette Lambda agit comme un proxy intelligent :
+
+1. Notre pipeline Airflow sur AWS envoie un appel à la fonction serverless au lieu d'interroger OpenSky directement.
+2. La fonction serverless, hébergée sur une IP non bloquée, interroge OpenSky à notre place.
+3. Elle filtre les résultats et nous renvoie les données prêtes à l'emploi.
+
+Ce contournement a résolu le problème immédiatement — et nous a permis au passage de mettre en pratique l'architecture **Serverless**. Une pierre, deux coups.
+
+
+---
+## Le Score de Risque : transformer la météo en indicateur de danger
+
+Après avoir nettoyé les données et associé chaque vol à sa station météo la plus proche, Spark calcule un **score de risque composite de 0 à 100** basé sur des règles aéronautiques officielles (FAA) :
+
+| Condition météorologique | Points | Justification |
+| :--- | :--- | :--- |
+| **Orage détecté** | **+40** | Dangers cumulés : turbulences extrêmes, givrage, cisaillements de vent. La FAA recommande de ne jamais approcher un orage sévère à moins de 20 nm. |
+| **Rafales > 80 km/h** | **+25** | Le Wind Shear déstabilise la portance et rend le contrôle difficile. |
+| **Précipitations > 5 mm** | **+20** | Visibilité réduite et aérodynamisme des ailes altéré. |
+| **Visibilité < 1 000 m** | **+20** | Passage obligatoire en conditions IFR (Instrument Flight Rules) — alerte majeure pour le contrôle aérien. |
+| **Altitude < 300 m en vol** | **+15** | Marge de récupération quasi nulle face aux cisaillements de basse couche (LLWS). |
+| **Couverture nuageuse > 80 %** | **+10** | Plafond bas masquant le développement de nuages d'orage. |
+
+> **Sources officielles utilisées pour définir ces règles métier :**
+> * **Orages et turbulences :** [FAA Advisory Circular 00-24C - Aviation Weather](https://skybrary.aero/sites/default/files/bookshelf/672.pdf)
+> * **Cisaillement de vent (Wind Shear) :** [National Weather Service (NWS) - Aviation Safety](https://www.weather.gov/zme/safety_llws)
+> * **Règles de visibilité et météo en vol :** [FAA - Pilot's Handbook of Aeronautical Knowledge (Chapitre 12)](https://www.faa.gov/sites/faa.gov/files/14_phak_ch12.pdf)
+
+Un avion traversant un orage avec rafales et mauvaise visibilité atteint facilement **80+** → **HIGH RISK**, affiché en rouge sur le dashboard. Un vol en croisière par temps clair obtient **0** → **LOW**.
+
+**Limite du score :** il croise météo et position, mais ne dit rien sur le **comportement de l'avion lui-même**. C'est là qu'intervient le Machine Learning.
 
 ---
 
-## 6. Le pipeline étape par étape
+## Machine Learning : détection automatique des phases de vol et des anomalies
 
-### 6.1 Extraction des données de vols (OpenSky via Lambda)
+C'est la brique qui transforme notre pipeline de données en véritable système de surveillance intelligent — et celle dont nous sommes le plus fiers.
 
-**Fichier** : `src/extract_flights.py`
+### Le constat : l'API ne dit pas tout
+L'API OpenSky fournit la vitesse, l'altitude et le taux de montée/descente de chaque avion — mais elle ne dit rien sur sa **phase de vol** (décollage, croisière, atterrissage), ni sur d'éventuels **comportements anormaux**. Ce sont pourtant des informations essentielles pour un système de surveillance aérienne — et c'est précisément de là que vient le nom **SkySafe** : un ciel surveillé et plus sûr.
 
-L'extraction des vols ne passe plus directement par l'API OpenSky (limites de débit trop contraignantes), mais par une **fonction serverless** hébergée sur Scaleway Cloud :
+Nous avons donc entraîné un modèle de **Machine Learning non supervisé** directement dans Spark, capable d'inférer automatiquement ces informations à chaque exécution du pipeline — soit toutes les minutes.
 
-1. Appel POST vers la Lambda avec la bounding box de la France en payload
-2. La Lambda interroge OpenSky et renvoie les données filtrées
-3. Ajout d'un champ `_extracted_at` (horodatage de l'extraction)
-4. Sauvegarde JSON brut sur S3 dans `raw/opensky/flights/date=.../hour=.../flights_raw.json`
+### K-Means : classer les phases de vol
 
-L'authentification OAuth2 est conservée dans le code pour l'appel direct à OpenSky (fallback), les credentials étant chargés depuis les variables d'environnement.
+Nous utilisons l'algorithme **K-Means** (disponible nativement dans Spark MLlib) pour regrouper les avions en **3 clusters** à partir de trois caractéristiques : **vitesse**, **altitude** et **taux de montée/descente**.
+Pour visualiser : imaginez tous les avions disposés sur une table. Le K-Means va naturellement les regrouper en trois tas :
 
-### 6.2 Extraction des données météo (Open-Meteo)
+- **Groupe 1** — Faible vitesse, basse altitude → **Décollage / Atterrissage**
+- **Groupe 2** — Vitesse moyenne, altitude variable, fort taux de montée → **Montée / Descente**
+- **Groupe 3** — Vitesse élevée, haute altitude, taux vertical quasi nul → **Croisière**
 
-**Fichier** : `src/extract_weather.py`
 
-Pour chaque point de la grille (6 aéroports), un appel GET est effectué vers l'API Open-Meteo avec les variables météo souhaitées en paramètre. Les résultats sont agrégés dans une liste JSON et sauvegardés sur S3 dans `raw/open_meteo/weather/`.
+La labellisation est automatique : les clusters sont triés par altitude moyenne croissante. Le cluster le plus bas devient "Takeoff / Landing", le plus haut "Cruise", et le troisième "Climb / Descent".
 
-L'API Open-Meteo est **gratuite et sans authentification**, ce qui simplifie considérablement l'intégration.
+En amont du K-Means, un **StandardScaler** normalise les trois features. Cette étape est indispensable car sans normalisation, l'altitude (exprimée en milliers de mètres) dominerait entièrement le calcul des distances, reléguant la vitesse et le taux vertical à un rôle quasi nul.
 
-### 6.3 Formatage des vols avec Spark
 
-**Fichier** : `src/format_flights.py`
+### Limitation du K-Means et mécanisme de fallback
 
-Le JSON brut d'OpenSky contient un tableau `states` où chaque vol est représenté par un **array positionnel** (index 0 = icao24, index 5 = longitude, etc.). Le job Spark :
+Le K-Means génère **toujours** $k = 3$ clusters, quelle que soit la distribution réelle des données. En pratique, cela pose problème aux heures creuses (2h–5h du matin), quand le trafic se réduit quasi exclusivement à des long-courriers en croisière : l'algorithme segmente alors artificiellement une population homogène en trois sous-groupes non significatifs.
 
-1. Lit le JSON brut depuis la dernière partition S3
-2. Mappe chaque array en un dictionnaire nommé avec typage explicite
-3. Nettoie les callsigns (trim, suppression des valeurs vides)
-4. Filtre les vols sans coordonnées GPS (`latitude IS NOT NULL AND longitude IS NOT NULL`)
-5. Convertit les timestamps epoch en type `timestamp` PySpark
-6. Ajoute un label lisible pour la source de position (`ADS-B`, `ASTERIX`, `MLAT`, `FLARM`)
-7. Écrit le résultat en **Parquet** dans `formatted/opensky/flights/`
+Pour pallier cette limite, nous basculons automatiquement sur une **classification par règles aéronautiques** lorsque les trois centroïdes sont trop proches (clusters non significatifs) :
 
-### 6.4 Formatage de la météo avec Spark
+- Altitude < 300 m et vitesse < 60 m/s → **Décollage / Atterrissage**
+- Altitude > 3 000 m et taux de variation verticale quasi nul → **Croisière**
+- Cas restants → **Montée / Descente**
 
-**Fichier** : `src/format_weather.py`
+Ce mécanisme assure une classification cohérente en toutes circonstances : K-Means en période normale, règles métier en période creuse — sans dégradation de la qualité des données.
 
-Job plus simple : extraction des champs depuis la structure `current` de chaque point géographique, aplatissement en records et écriture Parquet dans `formatted/open_meteo/weather/`.
+### Détection d'anomalies : identifier les comportements de vol suspects
+Une fois les clusters constitués, chaque avion se voit associer un **centroïde de référence** qui est le point central de son groupe. Nous calculons la **distance euclidienne** entre chaque avion et ce centroïde : c'est l'**anomaly_score**. Plus cette distance est grande, plus le comportement de l'avion s'éloigne de la norme de son groupe.
 
-### 6.5 Croisement spatial et Score de Risque
-
-**Fichier** : `src/combine_spark.py`
-
-C'est le cœur du pipeline. Ce job Spark réalise une **jointure spatiale** entre les vols et les points météo :
-
-#### Étape 1 : Cross Join + Haversine
-
-Chaque vol est croisé avec les 6 points météo. La distance entre le vol et chaque station est calculée via la **formule de Haversine** implémentée en expressions Spark natives (pas de UDF Python, pour des performances optimales) :
-
-$$d = 2R \cdot \arctan2\left(\sqrt{a}, \sqrt{1-a}\right)$$
-
-où $a = \sin^2\!\left(\frac{\Delta\varphi}{2}\right) + \cos(\varphi_1) \cdot \cos(\varphi_2) \cdot \sin^2\!\left(\frac{\Delta\lambda}{2}\right)$
-
-#### Étape 2 : Nearest Weather
-
-Pour chaque vol (`icao24`), seul le **point météo le plus proche** est conservé via une fenêtre Spark (`Window.partitionBy("icao24").orderBy(dist_km.asc())`).
-
-#### Étape 3 : Calcul du Score de Risque (0–100)
-
-Un score composite est calculé selon les règles métier suivantes :
-
-| Condition | Points |
-|---|---|
-| Orage (`weather_code >= 95`) | +40 |
-| Rafales > 80 km/h | +25 |
-| Rafales > 50 km/h | +10 |
-| Précipitations > 5 mm | +20 |
-| Précipitations > 0 mm | +10 |
-| Visibilité < 1 000 m | +20 |
-| Visibilité < 3 000 m | +10 |
-| Couverture nuageuse > 80% | +10 |
-| Couverture nuageuse > 50% | +5 |
-| Altitude baro < 300 m (en vol) | +15 |
-
-#### Étape 4 : Catégorisation
-
-Le score est traduit en catégorie :
-- **HIGH** : score ≥ 60
-- **MEDIUM** : score ≥ 30
-- **LOW** : score < 30
-
-Le résultat enrichi du score de risque est ensuite transmis à l'étape Machine Learning (section suivante) avant écriture finale en Parquet.
-
-### 6.6 Machine Learning — Classification des phases de vol et détection d'anomalies
-
-**Fichier** : `src/combine_spark.py` (intégré dans le même job Spark que le croisement spatial)
-
-L'API OpenSky ne fournit aucune information sur la **phase de vol** d'un avion (est-il en train de décoller, de monter, de croiser ou d'atterrir ?). De même, elle ne signale pas les comportements anormaux. Sky-Safe utilise le Machine Learning pour déduire automatiquement ces informations à partir des données brutes de cinématique.
-
-#### Approche hybride : K-Means + fallback par règles métier
-
-Le modèle fonctionne selon une approche **hybride** qui s'adapte à la distribution réelle du trafic à l'instant T :
-
-1. **Entraînement K-Means** : à chaque exécution du pipeline, un modèle K-Means (k=3) est entraîné sur les vecteurs normalisés `(velocity, baro_altitude, vertical_rate)` de tous les avions en vol
-2. **Vérification de qualité** : la distance maximale entre les centroïdes des 3 clusters est calculée. Si elle dépasse le seuil `MIN_CENTROID_SEPARATION = 1.0` (en espace normalisé), les clusters sont considérés comme significatifs
-3. **Deux modes de classification** :
-
-| Mode | Condition | Logique |
-|---|---|---|
-| **K-Means** | Clusters bien séparés (distance max ≥ 1.0) | Labellisation automatique par altitude moyenne croissante : cluster le plus bas → *Takeoff / Landing*, intermédiaire → *Climb / Descent*, le plus haut → *Cruise* |
-| **Règles métier** (fallback) | Clusters trop proches (distance max < 1.0) — ex. la nuit, quasi tous les avions sont en croisière | Seuils aéronautiques fixes : altitude < 300 m + vitesse < 60 m/s → *Takeoff / Landing*, altitude > 3 000 m + taux vertical quasi nul → *Cruise*, sinon → *Climb / Descent* |
-
-**Pourquoi cette approche hybride ?** Le K-Means force toujours k clusters, même si les données sont homogènes. À 3 h du matin, quand tous les avions survolant la France sont des long-courriers en croisière stable, le K-Means découperait artificiellement ce groupe en 3 sous-groupes sans signification. Le mécanisme de vérification détecte cette situation et bascule sur des règles métier fiables.
-
-#### Pipeline ML Spark
-
-```python
-# VectorAssembler → StandardScaler → KMeans
-assembler = VectorAssembler(inputCols=["velocity", "baro_altitude", "vertical_rate"], outputCol="features")
-scaler = StandardScaler(inputCol="features", outputCol="scaled_features", withStd=True, withMean=True)
-kmeans = KMeans(featuresCol="scaled_features", k=3, seed=42, maxIter=20)
-
-pipeline = Pipeline(stages=[assembler, scaler, kmeans])
-model = pipeline.fit(df)
-df_clustered = model.transform(df)
-```
-
-La normalisation via `StandardScaler` est essentielle : sans elle, l'altitude (valeurs en milliers de mètres) dominerait complètement la vitesse et le taux vertical dans le calcul des distances.
-
-#### Détection d'anomalies par distance au centroïde
-
-Une fois les clusters formés, chaque avion possède un centroïde de référence (le centre de son cluster). La **distance euclidienne** entre l'avion et son centroïde (en espace normalisé) mesure à quel point cet avion s'écarte du comportement typique de son groupe :
-
-$$\text{anomaly\_score} = \sqrt{(v - c_v)^2 + (a - c_a)^2 + (r - c_r)^2}$$
-
-où $(v, a, r)$ sont les features normalisées du vol et $(c_v, c_a, c_r)$ les coordonnées du centroïde.
-
-Le seuil d'anomalie est calculé dynamiquement sur la distribution des distances :
-
-$$\text{seuil} = \mu_d + 2 \times \sigma_d$$
-
-Tout vol dont l'`anomaly_score` dépasse ce seuil est marqué `is_anomaly = True`. En statistique, cela correspond environ aux **5 % de vols les plus atypiques** dans la distribution.
-
-**Exemple concret** : un avion classé « Cruise » (haute altitude) mais qui vole anormalement lentement avec un fort taux de descente sera très éloigné du centroïde de croisière → anomalie détectée. Cela peut indiquer un problème mécanique, une manœuvre d'urgence, ou un déroutement.
-
-#### Colonnes produites par le ML
-
-| Colonne | Type | Description |
-|---|---|---|
-| `flight_phase` | keyword | Phase de vol déduite : *Takeoff / Landing*, *Climb / Descent* ou *Cruise* |
-| `flight_phase_id` | integer | Identifiant numérique du cluster (0, 1 ou 2) |
-| `is_anomaly` | boolean | `true` si le vol est détecté comme anomalie |
-| `anomaly_score` | float | Distance au centroïde — plus c'est élevé, plus le comportement est atypique |
-
-Le résultat complet (score de risque + ML) est écrit en Parquet dans `enriched/sky_safe/flights_weather/`.
-
-### 6.7 Indexation dans Elasticsearch
-
-**Fichier** : `src/index_elastic.py`
-
-Ce module opère en deux phases :
-
-**Phase 1 — Couche Usage** : lecture du Parquet enrichi, sélection et renommage des colonnes pertinentes pour le dashboard, écriture Parquet dans `usage/sky_safe/dashboard/`.
-
-**Phase 2 — Bulk Insert** :
-1. Lecture de la couche Usage
-2. Conversion de chaque row en document ES : fusion `latitude`/`longitude` en un champ `location` de type `geo_point` (requis par Kibana Maps)
-3. Création de l'index avec un mapping explicite si inexistant (types `keyword`, `float`, `geo_point`, `date`, `boolean`…). Le mapping inclut les champs ML : `flight_phase` (keyword), `flight_phase_id` (integer), `is_anomaly` (boolean) et `anomaly_score` (float)
-4. Indexation en masse via l'API `bulk` d'Elasticsearch
-
-L'identifiant `_id` de chaque document est l'`icao24` de l'avion, ce qui fait qu'un avion est **mis à jour à chaque exécution** plutôt que dupliqué.
+Le seuil de détection est recalculé dynamiquement à chaque cycle selon la formule **moyenne + 2 écarts-types** sur l'ensemble des distances observées — ce qui correspond statistiquement aux **5 % de vols les plus atypiques**.
 
 ---
 
-## 7. Orchestration avec Apache Airflow
+## Le Résultat : un dashboard en temps réel
 
-### Le DAG principal : `sky_safe_pipeline`
+Toutes ces données enrichies arrivent dans **Elasticsearch**, puis s'affichent sur un tableau de bord **Kibana**. Voici ce que nous obtenons :
+- **Carte interactive** — Les avions sont représentés sur une carte de la France métropolitaine, avec un code couleur (vert / orange / rouge) reflétant leur niveau de risque calculé à partir du croisement entre leurs données de vol et les conditions météorologiques locales.
+- **Répartition des phases de vol** — Un diagramme circulaire affiche la composition du trafic en temps réel : quelle proportion d'avions est en croisière (*Cruise*), en décollage/atterrissage (*Takeoff / Landing*) ou en montée/descente (*Climb / Descent*) ?
+- **Distribution des scores** — Histogrammes du score de risque et de l'anomaly score, pour visualiser la distribution et identifier les seuils critiques.
+- **Tableau détaillé et filtrable** — Callsign, pays d'origine, altitude, vitesse, score de risque, phase de vol, statut d'anomalie. On peut cliquer sur n'importe quel avion pour voir ses détails.
+- **Anomalies** — Les vols à score élevé (> 80) et les comportements atypiques détectés par le modèle ML sont mis en évidence dans le tableau, pour une identification rapide.
 
-**Fichier** : `dags/sky_safe_dag.py`
+![Extrait du dashboard Kibana avec la carte des vols et les graphiques de distribution](./src/dashboard/kibana_dashboard_example.png)
 
-Le DAG s'exécute **toutes les minutes** (`schedule='* * * * *'`) et enchaîne 6 tâches :
-
-```
-extract_flights_api  ──►  format_flights_spark  ──┐
-                                                    ├──►  combine_data_spark  ──►  index_to_elastic
-extract_weather_api  ──►  format_weather_spark  ──┘
-```
-
-Propriétés clés :
-- `catchup=False` : pas de rattrapage des exécutions passées
-- `max_active_runs=1` : une seule exécution à la fois (évite les conflits de données)
-- `trigger_rule='all_success'` sur le combine : la jointure ne s'exécute que si les deux formatages réussissent
-- `retries=1` avec `retry_delay=1 min` : un seul retry automatique en cas d'échec
-
-### Le DAG de setup : `setup_kibana_once`
-
-**Fichier** : `dags/setup_kibana_dag.py`
-
-Un DAG `@once` (exécution unique) qui :
-1. **Attend** que l'index Elasticsearch contienne au moins un document (via un `PythonSensor` qui poll toutes les 30 secondes, timeout 10 min)
-2. **Importe** automatiquement le dashboard Kibana pré-configuré via l'API Saved Objects
-
-Cela permet une mise en place 100% automatique du dashboard dès la première exécution du pipeline.
+Le dashboard est importé **automatiquement** au premier lancement grâce à un second DAG Airflow qui attend que les premières données soient indexées dans Elasticsearch, puis injecte la configuration Kibana via l'API Saved Objects (pas d'intervention manuelle).
 
 ---
 
-## 8. Visualisation avec Kibana
+## Dans les coulisses : les détails d'implémentation
 
-Le dashboard Kibana est importé automatiquement depuis un fichier NDJSON (`src/dashboard/kibana_dashboard_config.ndjson`) et offre une vue interactive sur :
+Voici les choix techniques concrets qui rendent le pipeline robuste en production :
 
-- **Carte géographique** : position de chaque avion avec code couleur selon le `risk_category` ou la `flight_phase` (phase de vol déduite par le ML)
-- **Carte des anomalies** : les avions normaux apparaissent en vert, les anomalies détectées par le modèle ML en rouge vif — un contrôleur aérien identifie immédiatement les vols suspects
-- **Distribution des scores de risque** : histogramme et statistiques
-- **Distribution des phases de vol** : répartition circulaire (pie chart) *Takeoff / Landing*, *Climb / Descent*, *Cruise* — permet de voir d'un coup d'œil la composition du trafic
-- **Histogramme des anomaly scores** : visualise la distribution des distances au centroïde et le seuil au-delà duquel un vol est considéré comme atypique
-- **Conditions météo en temps réel** : vent, visibilité, précipitations par zone
-- **Tableau détaillé** : callsign, pays, altitude, vitesse, score, catégorie, phase de vol, anomalie
+- **Tout est conteneurisé** : un seul `docker-compose up` lance les 6 services (PostgreSQL, Airflow webserver, Airflow scheduler, Elasticsearch, Kibana, init container). Aucune installation manuelle.
+- **Zéro secret dans le code** : les credentials AWS, OpenSky et Airflow sont stockés dans un fichier `.env` local, exclu du dépôt Git via `.gitignore`. Le code source peut être rendu public sans risque.
+- **Données partitionnées sur S3** : chaque fichier est stocké sous la forme `s3://bucket/<layer>/<group>/<dataEntity>/date=YYYY-MM-DD/hour=HH/`. Spark lit directement la dernière partition sans scanner l'ensemble du bucket.
+- **Horodatage systématiquement en UTC** : dès l'étape de formatage Spark, toutes les dates sont converties en UTC. Cela évite les décalages temporels lors du croisement entre les données de vol (OpenSky) et les données météo (Open-Meteo), qui proviennent de fuseaux horaires différents.
+- **Mise à jour par clé ICAO dans Elasticsearch** : l'identifiant ICAO de l'avion sert de clé d'indexation. À chaque cycle, Elasticsearch met à jour le document existant s'il existe, ou en crée un nouveau sinon — le dashboard Kibana reflète toujours l'état le plus récent, sans accumulation de doublons.
 
-Le champ `location` (type `geo_point`) est la clé technique qui permet l'affichage cartographique dans Kibana Maps.
+---
+## Les leçons apprises
+
+Ce projet nous a confrontés à la réalité du Big Data bien au-delà des tutoriels :
+
+1. **Les APIs peuvent vous trahir en production.** OpenSky nous a bloqués dès le déploiement sur AWS, et c'est en cherchant un contournement — déployer une Lambda Scaleway comme proxy — que nous avons le plus progressé sur les architectures distribuées et serverless.
+2. **Le Machine Learning non supervisé est puissant, mais fragile face aux cas limites.** Le K-Means produit toujours exactement k clusters, même lorsque les données n'en forment qu'un seul. Notre approche hybride (ML + règles métier en fallback) nous a enseigné qu'un système robuste en production ne peut pas reposer sur un seul modèle : il faut anticiper ses zones d'échec et prévoir une stratégie de repli cohérente.
+3. **Spark est redoutable à condition de rester dans son écosystème.** En s'appuyant exclusivement sur des transformations natives — et en évitant les UDF Python qui cassent les optimisations du moteur — notre pipeline traite l'ensemble des vols actifs en quelques secondes, avec une empreinte mémoire minimale.
+4. **Docker Compose simplifie radicalement le déploiement.** Conteneuriser l'intégralité du projet permet à n'importe qui de le cloner et de le lancer en une seule commande, sans configuration manuelle — ce qui facilite aussi bien la reproductibilité que le partage.
 
 ---
 
-## 9. Infrastructure Docker
+## Reproduire le projet
 
-L'ensemble du projet est conteneurisé via **Docker Compose** (5 services) :
+Le projet est entièrement open source et disponible sur **[GitHub — SkySafe-DataLake](https://github.com/tahianahajanirina/SkySafe-DataLake)**.
 
-| Service | Image | Rôle |
-|---|---|---|
-| `postgres` | `postgres:13` | Base de données interne d'Airflow (métadonnées, états des DAGs) |
-| `airflow-init` | Custom (basée sur `apache/airflow:2.7.1`) | Migration BDD + création de l'utilisateur admin |
-| `airflow-webserver` | Custom | Interface web Airflow (port 8090) |
-| `airflow-scheduler` | Custom | Planificateur qui déclenche le DAG toutes les minutes |
-| `elasticsearch` | `elasticsearch:8.10.2` | Moteur de recherche et base de données finale |
-| `kibana` | `kibana:8.10.2` | Dashboard de visualisation (port 5601) |
-
-### Le Dockerfile
-
-```dockerfile
-FROM apache/airflow:2.7.1
-# Installation de Java 11 (requis par PySpark)
-# Téléchargement des JARs Hadoop-AWS pour le support S3A dans Spark
-# Installation des dépendances Python
-```
-
-Points notables :
-- **Java 11** est installé pour PySpark
-- Les **JARs Hadoop AWS** (`hadoop-aws-3.3.4.jar` + `aws-java-sdk-bundle-1.12.262.jar`) sont téléchargés pour permettre à Spark de lire/écrire directement sur S3 via le protocole `s3a://`
-- Les volumes Docker montent `dags/`, `src/` et `data/` en temps réel : **toute modification du code est appliquée sans rebuild**
-
-### Healthchecks et dépendances
-
-L'orchestration des démarrages est gérée par des **healthchecks** et des conditions `depends_on` :
-- PostgreSQL doit être healthy avant tout service Airflow
-- `airflow-init` doit se terminer avec succès avant le webserver et le scheduler
-- Elasticsearch doit être healthy avant le webserver (pour que le DAG puisse indexer)
-- Kibana attend Elasticsearch
+Le dépôt contient toutes les instructions nécessaires pour le lancer dans votre propre environnement. Vous y trouverez le détail des prérequis, la configuration des variables d'environnement et les étapes de démarrage pas à pas.
 
 ---
 
-## 10. Sécurité — Gestion des secrets
+**Merci de nous avoir lus jusqu'ici !** <br>
+Si ce projet vous a intéressé ou si vous avez des questions, n'hésitez pas à nous laisser une petite étoile sur le repo GitHub ⭐ ou à nous contacter.
 
-**Aucun secret n'est exposé en dur dans le code source.** Toutes les données sensibles sont externalisées dans un fichier `.env` (ignoré par Git via `.gitignore`) :
-
-| Variable | Description |
-|---|---|
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credentials de la base PostgreSQL |
-| `AIRFLOW__CORE__FERNET_KEY` | Clé de chiffrement des connexions Airflow |
-| `AIRFLOW__CORE__SECRET_KEY` | Clé JWT partagée webserver/scheduler |
-| `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` | Identifiants de l'utilisateur Airflow |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credentials AWS pour l'accès S3 |
-| `SKY_NETWORK_CLIENT_ID` / `SKY_NETWORK_CLIENT_SECRET` | Credentials OAuth2 OpenSky Network |
-
-Un fichier `.env.example` est fourni comme template, avec des valeurs `CHANGE_ME` à remplacer.
+Bon vol ! ✈️
 
 ---
 
-## 11. Stockage Cloud — Amazon S3
-
-Le Data Lake est hébergé sur **Amazon S3** (bucket `data705-opensky-datalake`, région `eu-north-1`). Le module `helpers.py` centralise toutes les interactions S3 :
-
-- **`save_json()`** : sérialise un objet Python en JSON et l'écrit sur S3 via `boto3.put_object()`
-- **`read_json()`** : lit un fichier JSON depuis S3 via `boto3.get_object()`
-- **`latest_partition()`** : parcourt les préfixes S3 (`date=` puis `hour=`) pour trouver automatiquement la partition la plus récente
-- **`get_spark()`** : configure la SparkSession avec les credentials S3 et le endpoint `s3a://` pour que Spark lise et écrive directement sur S3
-
----
-
-## 12. Serverless — Appel de fonction Lambda
-
-**Fichier** : `src/serverless_function_call.py`
-
-Pour contourner les limitations de débit de l'API OpenSky, une **fonction serverless** Scaleway est déployée. Le code Python envoie un POST avec la bounding box de la France :
-
-```python
-payload = {"bounding_box": [41.3, 51.1, -5.1, 9.6]}
-response = requests.post(lambda_url, json=payload, timeout=60)
-```
-
-La Lambda agit comme un **proxy intelligent** : elle interroge OpenSky et renvoie les données filtrées par zone géographique, réduisant la charge et le volume de données transitant vers notre pipeline.
-
----
-
-## 13. Déploiement sur le Cloud — Problèmes rencontrés
-
-> *Section à compléter avec les retours d'expérience du déploiement.*
-
-<!-- 
-TEMPLATE — Remplacer par vos véritables retours d'expérience :
-
-### 13.1 Problème : [Nom du problème]
-**Contexte** : ...
-**Erreur rencontrée** : ...
-**Solution** : ...
-
-### 13.2 Problème : [Nom du problème]
-**Contexte** : ...
-**Erreur rencontrée** : ...
-**Solution** : ...
--->
-
----
-
-## Conclusion
-
-Sky-Safe démontre qu'il est possible de construire un pipeline Big Data **complet, automatisé et temps-réel** avec des outils open source et des APIs gratuites. L'architecture Medallion garantit la traçabilité des données à chaque étape, Spark assure les transformations lourdes, et Elasticsearch + Kibana offrent une visualisation interactive immédiate.
-
-Les choix techniques clés qui ont fait la différence :
-- **Parallélisme des extractions** dans le DAG Airflow (les deux APIs sont interrogées simultanément)
-- **Formule de Haversine en Spark natif** (pas de UDF Python coûteuse)
-- **Machine Learning hybride** : K-Means pour la classification des phases de vol quand le trafic est hétérogène, fallback automatique sur des règles métier aéronautiques quand les données sont homogènes (évite les faux clusters)
-- **Détection d'anomalies sans supervision** : la distance euclidienne au centroïde K-Means, combinée à un seuil statistique dynamique ($\mu + 2\sigma$), identifie les vols au comportement atypique sans avoir besoin de données labellisées
-- **Partitionnement temporel sur S3** (retrouver la dernière partition en O(1) via l'API S3)
-- **Indexation par `icao24`** dans Elasticsearch (upsert naturel, pas de doublons)
-- **Setup automatique de Kibana** via un DAG sensor (zéro intervention manuelle)
-
----
-
-*Projet Sky-Safe — DATA705 BDD NoSQL — Télécom Paris — 2026*
+*Projet SkySafe — DATA705 BDD NoSQL — Télécom Paris — Février 2026*
