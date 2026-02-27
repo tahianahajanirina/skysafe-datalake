@@ -1,6 +1,5 @@
-# OUTILS MIS EN PAUSE (V2 avec LocalStack)
-# boto3
-# apache-airflow-providers-amazon
+# Stockage S3
+boto3
 
 # Calcul et transformation des données
 pyspark>3.4.0

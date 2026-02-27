@@ -4,16 +4,15 @@ extract_weather.py
 Extraction des données météo depuis l'API Open-Meteo.
 Sauvegarde en JSON dans : data/raw/open_meteo/weather/date=.../hour=.../
 """
-
 import os
 from datetime import datetime
 from typing import Dict, List, Optional
-
 import requests
 
 from helpers import (
     http_get,
     build_raw_path,
+    join_path,
     save_json,
     logger,
 )
@@ -86,7 +85,7 @@ def fetch_weather(weather_points: Optional[List[Dict]] = None) -> str:
 
     ts = datetime.utcnow()
     output_dir = build_raw_path("open_meteo", "weather", ts)
-    filepath = os.path.join(output_dir, "weather_raw.json")
+    filepath = join_path(output_dir, "weather_raw.json")
     save_json(all_results, filepath)
 
     logger.info("Données météo extraites pour %d points", len(all_results))

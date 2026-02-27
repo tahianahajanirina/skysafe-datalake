@@ -13,9 +13,11 @@ from helpers import (
     http_get,
     http_post,
     build_raw_path,
+    join_path,
     save_json,
     logger,
 )
+from serverless_function_call import fetch_flights_from_lambda
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION
@@ -24,16 +26,13 @@ from helpers import (
 SKY_NETWORK_BASE_URL: str = os.getenv(
     "SKY_NETWORK_BASE_URL", "https://opensky-network.org/api"
 )
-SKY_NETWORK_TOKEN_URL: str = (
+SKY_NETWORK_TOKEN_URL: str = os.getenv(
+    "SKY_NETWORK_TOKEN_URL",
     "https://auth.opensky-network.org/auth/realms/opensky-network"
-    "/protocol/openid-connect/token"
+    "/protocol/openid-connect/token",
 )
-SKY_NETWORK_CLIENT_ID: str = os.getenv(
-    "SKY_NETWORK_CLIENT_ID", "tahiana-api-client"
-)
-SKY_NETWORK_CLIENT_SECRET: str = os.getenv(
-    "SKY_NETWORK_CLIENT_SECRET", "OfiQ7YzZIJyBLAaqKHYb0BMx3LXXKKwK"
-)
+SKY_NETWORK_CLIENT_ID: str = os.getenv("SKY_NETWORK_CLIENT_ID", "")
+SKY_NETWORK_CLIENT_SECRET: str = os.getenv("SKY_NETWORK_CLIENT_SECRET", "")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -72,7 +71,7 @@ def fetch_flights(token: str) -> str:
 
     ts = datetime.utcnow()
     output_dir = build_raw_path("opensky", "flights", ts)
-    filepath = os.path.join(output_dir, "flights_raw.json")
+    filepath = join_path(output_dir, "flights_raw.json")
     save_json(raw_data, filepath)
 
     nb_flights = len(raw_data.get("states") or [])
@@ -86,7 +85,20 @@ def fetch_flights(token: str) -> str:
 
 def extract_flights_main() -> None:
     """Point d'entrée pour la tâche Airflow 'extract_flights_api'."""
-    logger.info("=== Démarrage extraction VOLS ===")
-    token = get_opensky_token()
-    filepath = fetch_flights(token)
+    logger.info("=== Démarrage extraction VOLS (via Lambda) ===")
+
+    raw_data = fetch_flights_from_lambda()
+    if raw_data is None:
+        logger.error("Échec de l'extraction via Lambda — aucune donnée reçue.")
+        raise RuntimeError("La Lambda n'a retourné aucune donnée.")
+
+    raw_data["_extracted_at"] = datetime.utcnow().isoformat()
+
+    ts = datetime.utcnow()
+    output_dir = build_raw_path("opensky", "flights", ts)
+    filepath = join_path(output_dir, "flights_raw.json")
+    save_json(raw_data, filepath)
+
+    nb_flights = len(raw_data.get("states") or [])
+    logger.info("Vols extraits via Lambda : %d", nb_flights)
     logger.info("=== Extraction VOLS terminée → %s ===", filepath)

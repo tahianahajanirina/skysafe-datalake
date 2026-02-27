@@ -10,7 +10,7 @@ x-airflow-env: &airflow-env
   AIRFLOW__CORE__SECRET_KEY: '${AIRFLOW__CORE__SECRET_KEY}'
   AIRFLOW__CORE__FERNET_KEY: '${AIRFLOW__CORE__FERNET_KEY}'
   AIRFLOW__WEBSERVER__SECRET_KEY: '${AIRFLOW__WEBSERVER__SECRET_KEY}'
-  AIRFLOW__WEBSERVER__WORKERS: '1'
+  AIRFLOW__WEBSERVER__WORKERS: '2'
   AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: '300'
   AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: '300'
   AIRFLOW__PROVIDERS__GOOGLE__HIDDEN: 'True'
@@ -18,10 +18,15 @@ x-airflow-env: &airflow-env
   # Supprime le warning Hadoop natif de Spark
   SPARK_HOME_WARN: 'false'
   HADOOP_HOME: '/tmp'
+  S3_BUCKET: 'data705-opensky-datalake'
+  AWS_ACCESS_KEY_ID: '${AWS_ACCESS_KEY_ID}'
+  AWS_SECRET_ACCESS_KEY: '${AWS_SECRET_ACCESS_KEY}'
+  AWS_DEFAULT_REGION: '${AWS_DEFAULT_REGION}'
 
 # 2. ON DÉFINIT LA RECETTE DE BASE AIRFLOW
 x-airflow-common: &airflow-common
   build: .
+  user: "${MY_UID:-1000}:0"
   environment: *airflow-env
   volumes:
     - ./dags:/opt/airflow/dags
@@ -49,9 +54,12 @@ services:
   # (s'exécute une seule fois, les autres services attendent sa complétion)
   airflow-init:
     <<: *airflow-common
-    environment: *airflow-env
+    environment:
+      <<: *airflow-env
+      AIRFLOW_ADMIN_USER: '${AIRFLOW_ADMIN_USER}'
+      AIRFLOW_ADMIN_PASSWORD: '${AIRFLOW_ADMIN_PASSWORD}'
     command: >
-      bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@skysafe.local"
+      bash -c "airflow db migrate && airflow users create --username $$AIRFLOW_ADMIN_USER --password $$AIRFLOW_ADMIN_PASSWORD --firstname Admin --lastname User --role Admin --email admin@skysafe.local"
 
   # L'INTERFACE WEB AIRFLOW
   airflow-webserver:
@@ -94,6 +102,8 @@ services:
       discovery.type: single-node
       xpack.security.enabled: 'false'
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
     healthcheck:
@@ -119,3 +129,6 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
+
+volumes:
+  es-data:
