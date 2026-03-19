@@ -2,6 +2,7 @@
   <h1>✈️ SkySafe — Flight & Weather Risk Analytics</h1>
   <p><b>Pipeline Big Data temps réel avec Machine Learning pour la surveillance du trafic aérien français.</b></p>
   <p>
+    <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
     <img src="https://img.shields.io/badge/Apache_Airflow-017CEE?style=for-the-badge&logo=apache-airflow&logoColor=white" alt="Airflow" />
     <img src="https://img.shields.io/badge/Apache_Spark-E25A1C?style=for-the-badge&logo=apache-spark&logoColor=white" alt="Spark" />
     <img src="https://img.shields.io/badge/Spark_MLlib-E25A1C?style=for-the-badge&logo=apache-spark&logoColor=white" alt="Spark MLlib" />
@@ -9,6 +10,7 @@
     <img src="https://img.shields.io/badge/Elasticsearch-005571?style=for-the-badge&logo=elasticsearch&logoColor=white" alt="Elasticsearch" />
     <img src="https://img.shields.io/badge/Kibana-005571?style=for-the-badge&logo=kibana&logoColor=white" alt="Kibana" />
     <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+    <img src="https://img.shields.io/badge/PostgreSQL-13-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
     <img src="https://img.shields.io/badge/Scaleway_Serverless-4F0599?style=for-the-badge&logo=scaleway&logoColor=white" alt="Scaleway" />
   </p>
 
