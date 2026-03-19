@@ -131,6 +131,20 @@ La **distance euclidienne** entre chaque avion et le centroïde de son cluster c
 
 ---
 
+## Screenshots
+
+<div align="center">
+  <img src="docs/screenshots/airflow-cluster.png" alt="Airflow Cluster Activity" width="100%" />
+  <p><em>Apache Airflow 2.7.1 — Cluster Activity avec métriques en temps réel (MetaDatabase & Scheduler : HEALTHY)</em></p>
+</div>
+
+<div align="center">
+  <img src="docs/screenshots/kibana-home.png" alt="Kibana Home" width="100%" />
+  <p><em>Kibana 8.10.2 — Interface de visualisation Elasticsearch</em></p>
+</div>
+
+---
+
 ## Dashboard Kibana
 
 Le dashboard est importé **automatiquement** au premier lancement via un DAG dédié (`setup_kibana_once`) qui attend l'arrivée des données dans Elasticsearch.
