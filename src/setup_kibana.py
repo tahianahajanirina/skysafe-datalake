@@ -1,7 +1,16 @@
+"""
+setup_kibana.py
+---------------
+Import automatique du dashboard Kibana via l'API Saved Objects.
+Attend que Kibana soit opérationnel avant de lancer l'import.
+"""
+
 import os
 import time
 
 import requests
+
+from helpers import logger
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 KIBANA_URL = os.getenv("KIBANA_URL", "http://kibana:5601")
@@ -17,31 +26,35 @@ def wait_for_kibana() -> bool:
         try:
             r = requests.get(f"{KIBANA_URL}/api/status", timeout=5)
             if r.status_code == 200:
-                print(f"Kibana prêt (tentative {attempt}).")
+                logger.info("Kibana prêt (tentative %d).", attempt)
                 return True
         except requests.ConnectionError:
             pass
-        print(f"Kibana pas encore prêt, nouvelle tentative dans {RETRY_DELAY_SEC}s... ({attempt}/{MAX_RETRIES})")
+        logger.info(
+            "Kibana pas encore prêt, nouvelle tentative dans %ds... (%d/%d)",
+            RETRY_DELAY_SEC, attempt, MAX_RETRIES,
+        )
         time.sleep(RETRY_DELAY_SEC)
     return False
 
 
 def importer_dashboard_kibana() -> None:
+    """Importe le dashboard Kibana depuis le fichier NDJSON."""
     # 1. Vérifier que le fichier NDJSON existe
     if not os.path.exists(NDJSON_PATH):
-        print(f"Erreur : {NDJSON_PATH} introuvable.")
-        print("Exporte ton dashboard depuis Kibana > Stack Management > Saved Objects > Export.")
+        logger.error("Fichier introuvable : %s", NDJSON_PATH)
+        logger.error("Exporte ton dashboard depuis Kibana > Stack Management > Saved Objects > Export.")
         return
 
     # 2. Attendre que Kibana soit opérationnel
     if not wait_for_kibana():
-        print("Kibana n'a pas répondu après toutes les tentatives. Abandon.")
+        logger.error("Kibana n'a pas répondu après toutes les tentatives. Abandon.")
         return
 
     # 3. Import via l'API Saved Objects
     headers = {"kbn-xsrf": "true"}
 
-    print(f"Import de {NDJSON_PATH} vers {IMPORT_ENDPOINT}...")
+    logger.info("Import de %s vers %s...", NDJSON_PATH, IMPORT_ENDPOINT)
     with open(NDJSON_PATH, "rb") as f:
         resp = requests.post(IMPORT_ENDPOINT, headers=headers, files={"file": f}, timeout=30)
 
@@ -50,13 +63,13 @@ def importer_dashboard_kibana() -> None:
         data = resp.json()
         success = data.get("successCount", 0)
         errors = data.get("errors", [])
-        print(f"Import terminé : {success} objet(s) importé(s).")
+        logger.info("Import terminé : %d objet(s) importé(s).", success)
         if errors:
             for err in errors:
-                print(f"  Erreur : {err.get('id')} — {err.get('error', {}).get('message')}")
+                logger.error("  Erreur : %s — %s", err.get("id"), err.get("error", {}).get("message"))
     else:
-        print(f"Échec de l'import (HTTP {resp.status_code}).")
-        print(resp.text)
+        logger.error("Échec de l'import (HTTP %d).", resp.status_code)
+        logger.error("%s", resp.text)
 
 
 if __name__ == "__main__":

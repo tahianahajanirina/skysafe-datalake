@@ -1,5 +1,44 @@
-__pycache__
-postman
-data/
-.venv
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment & secrets
 .env
+
+# Project-specific
+data/
+postman/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Spark / Java
+*.jar
+metastore_db/
+derby.log
+spark-warehouse/

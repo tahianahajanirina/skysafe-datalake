@@ -1,3 +1,10 @@
+"""
+format_weather.py
+-----------------
+Job Spark : raw/open_meteo/weather → formatted/open_meteo/weather
+Dépend uniquement de : extract_weather
+"""
+
 from pyspark.sql import functions as F
 
 from helpers import get_spark, latest_partition, output_path, join_path, read_json, logger
