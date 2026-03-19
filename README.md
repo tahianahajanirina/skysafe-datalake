@@ -134,13 +134,23 @@ La **distance euclidienne** entre chaque avion et le centroïde de son cluster c
 ## Screenshots
 
 <div align="center">
-  <img src="docs/screenshots/airflow-cluster.png" alt="Airflow Cluster Activity" width="100%" />
-  <p><em>Apache Airflow 2.7.1 — Cluster Activity avec métriques en temps réel (MetaDatabase & Scheduler : HEALTHY)</em></p>
+  <img src="docs/screenshots/airflow-dags-list.jpg" alt="Airflow DAGs" width="100%" />
+  <p><em>Apache Airflow — Liste des DAGs actifs : <code>setup_kibana_once</code> et <code>sky_safe_pipeline</code></em></p>
 </div>
 
 <div align="center">
-  <img src="docs/screenshots/kibana-home.png" alt="Kibana Home" width="100%" />
-  <p><em>Kibana 8.10.2 — Interface de visualisation Elasticsearch</em></p>
+  <img src="docs/screenshots/airflow-dag-pipeline.jpg" alt="DAG sky_safe_pipeline" width="100%" />
+  <p><em>DAG <code>sky_safe_pipeline</code> — Pipeline Big Data : extraction vols (OpenSky) + météo (Open-Meteo) → Elasticsearch</em></p>
+</div>
+
+<div align="center">
+  <img src="docs/screenshots/airflow-dag-setup-kibana.jpg" alt="DAG setup_kibana_once" width="100%" />
+  <p><em>DAG <code>setup_kibana_once</code> — Import automatique du dashboard Kibana après la première indexation ES</em></p>
+</div>
+
+<div align="center">
+  <img src="docs/screenshots/kibana-dashboard.jpg" alt="Kibana Dashboard" width="100%" />
+  <p><em>Dashboard Kibana — Carte interactive des vols en temps réel avec scoring de risque ML et détection d'anomalies</em></p>
 </div>
 
 ---
