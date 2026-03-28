@@ -1,4 +1,5 @@
 <div align="center">
+  <img src="docs/screenshots/hero.jpg" alt="SkySafe" width="80%" style="border-radius:12px; margin-bottom:16px"/>
   <h1>✈️ SkySafe — Flight & Weather Risk Analytics</h1>
   <p><b>Pipeline Big Data temps réel avec Machine Learning pour la surveillance du trafic aérien français.</b></p>
   <p>
