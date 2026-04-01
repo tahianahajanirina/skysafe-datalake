@@ -268,7 +268,9 @@ MY_UID=$(id -u) docker-compose up -d --build
 
 Le DAG `sky_safe_pipeline` démarre automatiquement et s'exécute toutes les minutes. Le dashboard Kibana est importé automatiquement dès que les premières données arrivent dans Elasticsearch.
 
-![DAGs Airflow du projet SkySafe](utils/dags_airflow.png)
+<a href="https://raw.githubusercontent.com/tahianahajanirina/skysafe-datalake/main/docs/diagrams/dags_airflow.svg">
+  <img src="docs/diagrams/dags_airflow.svg" alt="DAGs Airflow SkySafe" width="90%"/>
+</a>
 
 ### 6. Arrêter le projet
 
@@ -286,7 +288,6 @@ docker-compose down -v
 
 ## 📁 Structure du projet
 
-![Arborescence du projet SkySafe](utils/arborescence.png)
 
 <details>
 <summary>📝 Détail des fichiers principaux</summary>

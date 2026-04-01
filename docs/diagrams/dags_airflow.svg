@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 600" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <rect x="0" y="0" width="1100" height="600" rx="10" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#017CEE"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#4a7c59"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="550" y="32" text-anchor="middle" font-size="20" font-weight="700" fill="#1e1e1e">SkySafe — Airflow DAGs</text>
+  <text x="550" y="50" text-anchor="middle" font-size="11" fill="#888">Orchestration du pipeline Big Data</text>
+
+  <!-- ===== DAG 1 SWIMLANE ===== -->
+  <rect x="30" y="70" width="1040" height="310" rx="10" fill="#e8f4fd" fill-opacity="0.5" stroke="#017CEE" stroke-width="1.5"/>
+  <text x="50" y="95" font-size="14" fill="#017CEE" font-weight="700">DAG 1 — sky_safe_pipeline</text>
+  <text x="50" y="112" font-size="10" fill="#017CEE">schedule: * * * * *  (every minute)</text>
+
+  <!-- Flight branch -->
+  <!-- extract_flights -->
+  <rect x="70" y="140" width="200" height="50" rx="8" fill="#a5d8ff" stroke="#017CEE" stroke-width="1.5"/>
+  <text x="170" y="163" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">extract_flights</text>
+  <text x="170" y="180" text-anchor="middle" font-size="9" fill="#017CEE">OpenSky API → S3 raw/</text>
+
+  <!-- format_flights_spark -->
+  <rect x="340" y="140" width="220" height="50" rx="8" fill="#a5d8ff" stroke="#017CEE" stroke-width="1.5"/>
+  <text x="450" y="163" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">format_flights_spark</text>
+  <text x="450" y="180" text-anchor="middle" font-size="9" fill="#017CEE">PySpark: GPS filter, UTC → S3 formatted/</text>
+
+  <!-- Arrow: extract_flights → format_flights_spark -->
+  <line x1="270" y1="165" x2="340" y2="165" stroke="#017CEE" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Weather branch -->
+  <!-- extract_weather -->
+  <rect x="70" y="230" width="200" height="50" rx="8" fill="#a5d8ff" stroke="#017CEE" stroke-width="1.5"/>
+  <text x="170" y="253" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">extract_weather</text>
+  <text x="170" y="270" text-anchor="middle" font-size="9" fill="#017CEE">Open-Meteo 6 stations → S3 raw/</text>
+
+  <!-- format_weather_spark -->
+  <rect x="340" y="230" width="220" height="50" rx="8" fill="#a5d8ff" stroke="#017CEE" stroke-width="1.5"/>
+  <text x="450" y="253" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">format_weather_spark</text>
+  <text x="450" y="270" text-anchor="middle" font-size="9" fill="#017CEE">PySpark: cleaning → S3 formatted/</text>
+
+  <!-- Arrow: extract_weather → format_weather_spark -->
+  <line x1="270" y1="255" x2="340" y2="255" stroke="#017CEE" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- combine_data_spark -->
+  <rect x="640" y="185" width="210" height="50" rx="8" fill="#74c0fc" stroke="#017CEE" stroke-width="1.5"/>
+  <text x="745" y="208" text-anchor="middle" font-size="13" font-weight="700" fill="#1e1e1e">combine_data_spark</text>
+  <text x="745" y="225" text-anchor="middle" font-size="8" fill="#017CEE">Haversine join + Risk Score + K-Means + Anomalies</text>
+
+  <!-- Arrows: format branches → combine -->
+  <line x1="560" y1="165" x2="640" y2="200" stroke="#017CEE" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="560" y1="255" x2="640" y2="220" stroke="#017CEE" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- index_to_elastic -->
+  <rect x="920" y="185" width="130" height="50" rx="8" fill="#a5d8ff" stroke="#017CEE" stroke-width="1.5"/>
+  <text x="985" y="208" text-anchor="middle" font-size="12" font-weight="600" fill="#1e1e1e">index_to_elastic</text>
+  <text x="985" y="224" text-anchor="middle" font-size="8" fill="#017CEE">Bulk upsert ES by ICAO24</text>
+
+  <!-- Arrow: combine → index -->
+  <line x1="850" y1="210" x2="920" y2="210" stroke="#017CEE" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- S3 output annotations -->
+  <rect x="660" y="250" width="170" height="36" rx="6" fill="#fff8e1" stroke="#FF9900" stroke-width="1"/>
+  <text x="745" y="266" text-anchor="middle" font-size="9" font-weight="600" fill="#b45309">S3 enriched/ + usage/</text>
+  <text x="745" y="278" text-anchor="middle" font-size="8" fill="#b45309">Parquet</text>
+  <line x1="745" y1="235" x2="745" y2="250" stroke="#FF9900" stroke-width="1" stroke-dasharray="3 2"/>
+
+  <!-- Parallel indicator -->
+  <text x="170" y="210" text-anchor="middle" font-size="9" fill="#555" font-style="italic">parallel</text>
+  <line x1="120" y1="195" x2="120" y2="225" stroke="#aaa" stroke-width="1" stroke-dasharray="3 2"/>
+  <line x1="220" y1="195" x2="220" y2="225" stroke="#aaa" stroke-width="1" stroke-dasharray="3 2"/>
+
+  <!-- Merge indicator -->
+  <text x="600" y="215" text-anchor="middle" font-size="9" fill="#555" font-style="italic">merge</text>
+
+  <!-- ===== DAG 2 SWIMLANE ===== -->
+  <rect x="30" y="410" width="1040" height="160" rx="10" fill="#e8f5e9" fill-opacity="0.5" stroke="#4a7c59" stroke-width="1.5"/>
+  <text x="50" y="438" font-size="14" fill="#4a7c59" font-weight="700">DAG 2 — setup_kibana_once</text>
+  <text x="50" y="455" font-size="10" fill="#4a7c59">schedule: @once  (runs once at startup)</text>
+
+  <!-- wait_for_elasticsearch -->
+  <rect x="100" y="475" width="240" height="50" rx="8" fill="#c8e6c9" stroke="#4a7c59" stroke-width="1.5"/>
+  <text x="220" y="498" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">wait_for_elasticsearch</text>
+  <text x="220" y="515" text-anchor="middle" font-size="9" fill="#4a7c59">HttpSensor: ES cluster health</text>
+
+  <!-- import_kibana_index_pattern -->
+  <rect x="420" y="475" width="260" height="50" rx="8" fill="#c8e6c9" stroke="#4a7c59" stroke-width="1.5"/>
+  <text x="550" y="498" text-anchor="middle" font-size="12" font-weight="600" fill="#1e1e1e">import_kibana_index_pattern</text>
+  <text x="550" y="515" text-anchor="middle" font-size="9" fill="#4a7c59">Saved Objects API</text>
+
+  <!-- import_kibana_dashboard -->
+  <rect x="760" y="475" width="260" height="50" rx="8" fill="#c8e6c9" stroke="#4a7c59" stroke-width="1.5"/>
+  <text x="890" y="498" text-anchor="middle" font-size="12" font-weight="600" fill="#1e1e1e">import_kibana_dashboard</text>
+  <text x="890" y="515" text-anchor="middle" font-size="9" fill="#4a7c59">Saved Objects API</text>
+
+  <!-- Arrows: DAG 2 sequence -->
+  <line x1="340" y1="500" x2="420" y2="500" stroke="#4a7c59" stroke-width="2" marker-end="url(#arrow-gray)"/>
+  <line x1="680" y1="500" x2="760" y2="500" stroke="#4a7c59" stroke-width="2" marker-end="url(#arrow-gray)"/>
+
+  <!-- Footer -->
+  <text x="550" y="590" text-anchor="middle" font-size="10" fill="#aaa">SkySafe — Airflow DAGs Architecture</text>
+</svg>
