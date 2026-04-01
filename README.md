@@ -76,7 +76,7 @@ Les deux branches d'extraction s'exécutent **en parallèle**. La jointure spati
 | **3. Combine & ML** | `enriched/` | **Jointure spatiale** (formule de Haversine) vols × station météo la plus proche. Calcul du **Score de Risque** (0–100). Entraînement **K-Means** pour classifier les phases de vol, avec **fallback automatique** sur des règles métier quand le trafic est homogène. **Détection d'anomalies** par distance euclidienne au centroïde (seuil μ + 2σ). |
 | **4. Index** | `usage/` | Sélection des colonnes dashboard, fusion lat/lon en `geo_point`, indexation **bulk** dans Elasticsearch (upsert par ICAO24 → pas de doublons). |
 
-![Architecture du pipeline SkySafe](utils/architecture.png)
+<a href="https://raw.githubusercontent.com/tahianahajanirina/skysafe-datalake/main/docs/diagrams/architecture.svg"><img src="docs/diagrams/architecture.svg" alt="Architecture SkySafe" width="90%"/></a>
 
 ---
 

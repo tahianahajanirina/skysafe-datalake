@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 780" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <rect x="0" y="0" width="1300" height="780" rx="12" fill="#ffffff"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#1e1e1e"/>
+    </marker>
+    <marker id="arr-spark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="5" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#E25A1C"/>
+    </marker>
+    <marker id="arr-s3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="5" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#FF9900"/>
+    </marker>
+    <marker id="arr-elastic" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="5" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#005571"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="650" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#1e1e1e">SkySafe — Architecture du Pipeline Big Data</text>
+  <text x="650" y="50" text-anchor="middle" font-size="12" fill="#666">Surveillance du trafic aerien francais en temps reel</text>
+
+  <!-- ===== DATA SOURCES ZONE ===== -->
+  <rect x="50" y="65" width="700" height="110" rx="10" fill="#d3f9d8" fill-opacity="0.35" stroke="#22c55e" stroke-width="1"/>
+  <text x="62" y="82" font-size="11" fill="#15803d" font-weight="700" letter-spacing="1">SOURCES DE DONNEES</text>
+
+  <!-- OpenSky API -->
+  <rect x="70" y="92" width="300" height="34" rx="6" fill="#c3fae8" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="220" y="114" text-anchor="middle" font-size="14" font-weight="600" fill="#1e1e1e">OpenSky Network API</text>
+  <rect x="100" y="134" width="240" height="24" rx="5" fill="#e9d5ff" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="220" y="150" text-anchor="middle" font-size="11" fill="#6d28d9">Scaleway Serverless Proxy</text>
+
+  <!-- OpenSky details -->
+  <text x="220" y="80" text-anchor="middle" font-size="10" fill="#15803d">ICAO24, lat/lon, altitude, vitesse</text>
+
+  <!-- Open-Meteo API -->
+  <rect x="420" y="92" width="310" height="34" rx="6" fill="#c3fae8" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="575" y="114" text-anchor="middle" font-size="14" font-weight="600" fill="#1e1e1e">Open-Meteo API</text>
+  <text x="575" y="80" text-anchor="middle" font-size="10" fill="#15803d">6 stations FR: CDG, Toulouse, Lyon, Marseille, Nantes, Lille</text>
+
+  <!-- ===== ORCHESTRATION ZONE ===== -->
+  <rect x="50" y="195" width="700" height="75" rx="10" fill="#dbe4ff" fill-opacity="0.4" stroke="#017CEE" stroke-width="1"/>
+  <text x="62" y="212" font-size="11" fill="#017CEE" font-weight="700" letter-spacing="1">ORCHESTRATION</text>
+
+  <rect x="250" y="218" width="300" height="38" rx="6" fill="#a5d8ff" stroke="#017CEE" stroke-width="1.5"/>
+  <text x="400" y="242" text-anchor="middle" font-size="16" font-weight="600" fill="#1e1e1e">Apache Airflow :8080</text>
+  <text x="400" y="260" text-anchor="middle" font-size="10" fill="#017CEE">DAG 4 etapes — cron toutes les minutes</text>
+
+  <!-- Arrows: Sources → Airflow -->
+  <line x1="220" y1="158" x2="350" y2="218" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="575" y1="126" x2="450" y2="218" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="270" y="185" font-size="10" fill="#555">extract_flights</text>
+  <text x="490" y="185" font-size="10" fill="#555">extract_weather</text>
+
+  <!-- ===== PROCESSING ZONE (Spark) ===== -->
+  <rect x="50" y="295" width="700" height="170" rx="10" fill="#fff0e6" fill-opacity="0.4" stroke="#E25A1C" stroke-width="1"/>
+  <text x="62" y="312" font-size="11" fill="#E25A1C" font-weight="700" letter-spacing="1">TRAITEMENT (Apache Spark / PySpark)</text>
+
+  <!-- Format layer -->
+  <text x="400" y="330" text-anchor="middle" font-size="11" fill="#E25A1C" font-weight="600">Format Layer</text>
+  <rect x="80" y="338" width="280" height="34" rx="6" fill="#fed7aa" stroke="#E25A1C" stroke-width="1.5"/>
+  <text x="220" y="360" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">format_flights_spark</text>
+  <rect x="400" y="338" width="280" height="34" rx="6" fill="#fed7aa" stroke="#E25A1C" stroke-width="1.5"/>
+  <text x="540" y="360" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">format_weather_spark</text>
+
+  <text x="220" y="385" text-anchor="middle" font-size="9" fill="#92400e">Type casting, filtrage GPS, normalisation UTC</text>
+  <text x="540" y="385" text-anchor="middle" font-size="9" fill="#92400e">Type casting, normalisation UTC</text>
+
+  <!-- Arrows: Airflow → Format -->
+  <line x1="350" y1="256" x2="220" y2="338" stroke="#E25A1C" stroke-width="2" marker-end="url(#arr-spark)"/>
+  <line x1="450" y1="256" x2="540" y2="338" stroke="#E25A1C" stroke-width="2" marker-end="url(#arr-spark)"/>
+
+  <!-- Combine layer -->
+  <rect x="180" y="400" width="400" height="38" rx="6" fill="#fed7aa" stroke="#E25A1C" stroke-width="1.5"/>
+  <text x="380" y="424" text-anchor="middle" font-size="14" font-weight="600" fill="#1e1e1e">combine_data_spark</text>
+
+  <!-- Arrows: Format → Combine -->
+  <line x1="220" y1="372" x2="300" y2="400" stroke="#E25A1C" stroke-width="1.5" marker-end="url(#arr-spark)"/>
+  <line x1="540" y1="372" x2="460" y2="400" stroke="#E25A1C" stroke-width="1.5" marker-end="url(#arr-spark)"/>
+
+  <!-- Combine details -->
+  <text x="380" y="452" text-anchor="middle" font-size="9" fill="#92400e">Jointure spatiale Haversine | Risk Score 0-100 | K-Means 3 phases | Anomalies (mu + 2 sigma)</text>
+
+  <!-- ===== MLlib sidebar ===== -->
+  <rect x="780" y="295" width="230" height="170" rx="10" fill="#fff0e6" fill-opacity="0.28" stroke="#E25A1C" stroke-width="1"/>
+  <text x="792" y="312" font-size="11" fill="#E25A1C" font-weight="700" letter-spacing="1">SPARK MLlib</text>
+  <rect x="800" y="325" width="190" height="28" rx="5" fill="#fed7aa" stroke="#E25A1C" stroke-width="1"/>
+  <text x="895" y="344" text-anchor="middle" font-size="12" fill="#1e1e1e">K-Means (3 clusters)</text>
+  <text x="895" y="370" text-anchor="middle" font-size="10" fill="#92400e">Takeoff/Landing</text>
+  <text x="895" y="384" text-anchor="middle" font-size="10" fill="#92400e">Climb/Descent</text>
+  <text x="895" y="398" text-anchor="middle" font-size="10" fill="#92400e">Cruise</text>
+
+  <rect x="800" y="415" width="190" height="28" rx="5" fill="#fed7aa" stroke="#E25A1C" stroke-width="1"/>
+  <text x="895" y="434" text-anchor="middle" font-size="12" fill="#1e1e1e">Anomaly Detection</text>
+  <text x="895" y="454" text-anchor="middle" font-size="10" fill="#92400e">mu + 2 sigma threshold</text>
+
+  <!-- Dashed arrow: combine → MLlib -->
+  <line x1="580" y1="419" x2="780" y2="380" stroke="#E25A1C" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr-spark)"/>
+
+  <!-- ===== STORAGE ZONE (S3 Medallion) ===== -->
+  <rect x="50" y="490" width="700" height="90" rx="10" fill="#fff8e1" fill-opacity="0.4" stroke="#FF9900" stroke-width="1"/>
+  <text x="62" y="507" font-size="11" fill="#b45309" font-weight="700" letter-spacing="1">STOCKAGE — Amazon S3 (Medallion Architecture)</text>
+
+  <rect x="75" y="518" width="140" height="44" rx="6" fill="#ffe0b2" stroke="#FF9900" stroke-width="1.5"/>
+  <text x="145" y="539" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">raw/</text>
+  <text x="145" y="554" text-anchor="middle" font-size="9" fill="#92400e">JSON brut</text>
+
+  <rect x="235" y="518" width="140" height="44" rx="6" fill="#ffe0b2" stroke="#FF9900" stroke-width="1.5"/>
+  <text x="305" y="539" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">formatted/</text>
+  <text x="305" y="554" text-anchor="middle" font-size="9" fill="#92400e">Parquet type</text>
+
+  <rect x="395" y="518" width="140" height="44" rx="6" fill="#ffe0b2" stroke="#FF9900" stroke-width="1.5"/>
+  <text x="465" y="539" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">enriched/</text>
+  <text x="465" y="554" text-anchor="middle" font-size="9" fill="#92400e">Parquet enrichi</text>
+
+  <rect x="555" y="518" width="140" height="44" rx="6" fill="#ffe0b2" stroke="#FF9900" stroke-width="1.5"/>
+  <text x="625" y="539" text-anchor="middle" font-size="13" font-weight="600" fill="#1e1e1e">usage/</text>
+  <text x="625" y="554" text-anchor="middle" font-size="9" fill="#92400e">Parquet final</text>
+
+  <!-- Arrows between S3 layers -->
+  <line x1="215" y1="540" x2="235" y2="540" stroke="#FF9900" stroke-width="1.5" marker-end="url(#arr-s3)"/>
+  <line x1="375" y1="540" x2="395" y2="540" stroke="#FF9900" stroke-width="1.5" marker-end="url(#arr-s3)"/>
+  <line x1="535" y1="540" x2="555" y2="540" stroke="#FF9900" stroke-width="1.5" marker-end="url(#arr-s3)"/>
+
+  <!-- Arrow: Spark → S3 -->
+  <line x1="380" y1="460" x2="380" y2="490" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="390" y="480" font-size="10" fill="#555">Parquet</text>
+
+  <!-- ===== INDEXING & VISUALIZATION ZONE ===== -->
+  <rect x="50" y="605" width="700" height="90" rx="10" fill="#e0f2f1" fill-opacity="0.4" stroke="#005571" stroke-width="1"/>
+  <text x="62" y="622" font-size="11" fill="#005571" font-weight="700" letter-spacing="1">INDEXATION &amp; VISUALISATION</text>
+
+  <rect x="80" y="635" width="250" height="42" rx="6" fill="#b2dfdb" stroke="#005571" stroke-width="1.5"/>
+  <text x="205" y="656" text-anchor="middle" font-size="15" font-weight="600" fill="#1e1e1e">Elasticsearch :9200</text>
+  <text x="205" y="670" text-anchor="middle" font-size="9" fill="#005571">Bulk upsert ICAO24, geo_point mapping</text>
+
+  <rect x="380" y="635" width="250" height="42" rx="6" fill="#f8bbd0" stroke="#E8478B" stroke-width="1.5"/>
+  <text x="505" y="656" text-anchor="middle" font-size="15" font-weight="600" fill="#1e1e1e">Kibana :5601</text>
+  <text x="505" y="670" text-anchor="middle" font-size="9" fill="#E8478B">Carte, histogrammes, pie phases, table</text>
+
+  <!-- Arrow: S3 → Elasticsearch -->
+  <line x1="300" y1="580" x2="205" y2="635" stroke="#005571" stroke-width="2" marker-end="url(#arr-elastic)"/>
+  <text x="230" y="606" font-size="10" fill="#005571">index_to_elastic</text>
+
+  <!-- Arrow: Elasticsearch → Kibana -->
+  <line x1="330" y1="656" x2="380" y2="656" stroke="#E8478B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ===== POSTGRESQL SIDEBAR ===== -->
+  <rect x="780" y="490" width="230" height="90" rx="10" fill="#e8eaf6" fill-opacity="0.4" stroke="#336791" stroke-width="1"/>
+  <text x="792" y="507" font-size="11" fill="#336791" font-weight="700" letter-spacing="1">METADONNEES</text>
+  <rect x="800" y="520" width="190" height="38" rx="6" fill="#c5cae9" stroke="#336791" stroke-width="1.5"/>
+  <text x="895" y="544" text-anchor="middle" font-size="14" font-weight="600" fill="#1e1e1e">PostgreSQL :5432</text>
+  <text x="895" y="570" text-anchor="middle" font-size="10" fill="#336791">Airflow metadata DB</text>
+
+  <!-- Dashed arrow: Airflow → PostgreSQL -->
+  <line x1="550" y1="237" x2="780" y2="540" stroke="#336791" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+
+  <!-- ===== KIBANA DASHBOARD DETAIL ===== -->
+  <rect x="780" y="605" width="230" height="90" rx="10" fill="#fce4ec" fill-opacity="0.4" stroke="#E8478B" stroke-width="1"/>
+  <text x="792" y="622" font-size="11" fill="#E8478B" font-weight="700" letter-spacing="1">DASHBOARD KIBANA</text>
+  <text x="895" y="645" text-anchor="middle" font-size="10" fill="#1e1e1e">Carte interactive des vols</text>
+  <text x="895" y="660" text-anchor="middle" font-size="10" fill="#1e1e1e">Histogrammes altitude/vitesse</text>
+  <text x="895" y="675" text-anchor="middle" font-size="10" fill="#1e1e1e">Pie chart phases de vol</text>
+  <text x="895" y="690" text-anchor="middle" font-size="10" fill="#1e1e1e">Table filtrable ICAO24</text>
+
+  <!-- Dashed arrow: Kibana → Dashboard detail -->
+  <line x1="630" y1="656" x2="780" y2="660" stroke="#E8478B" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+
+  <!-- ===== FLOW LABEL ===== -->
+  <text x="650" y="760" text-anchor="middle" font-size="11" fill="#999">OpenSky + Open-Meteo → Airflow → Spark → S3 (raw → formatted → enriched → usage) → Elasticsearch → Kibana</text>
+</svg>
